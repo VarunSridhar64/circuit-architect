@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circuit Architect — AI PCB Designer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0c0f;
+  --bg2: #0f1215;
+  --bg3: #151a1f;
+  --bg4: #1c2228;
+  --border: #1e2730;
+  --border2: #2a3540;
+  --text: #e8edf2;
+  --text2: #8a9db0;
+  --text3: #4a5a6a;
+  --accent: #00d4a0;
+  --accent2: #00a87d;
+  --accent-dim: rgba(0,212,160,0.08);
+  --accent-glow: rgba(0,212,160,0.15);
+  --warn: #f0a030;
+  --error: #e05050;
+  --pcb-board: #1a3a2a;
+  --pcb-copper: #c8960a;
+  --pcb-silk: #f0f0f0;
+  --pcb-via: #888;
+  --mono: 'JetBrains Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  height: 52px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 20px;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-mark {
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid var(--accent);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.logo-mark svg { width: 16px; height: 16px; }
+
+.logo-name {
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.logo-tag {
+  font-size: 9px;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+  background: var(--accent-dim);
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--accent-glow);
+}
+
+.topbar-sep { width: 1px; height: 28px; background: var(--border); }
+
+.view-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg3);
+  border-radius: 6px;
+  padding: 3px;
+  border: 1px solid var(--border);
+}
+
+.view-tab {
+  padding: 5px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+  transition: all 0.15s;
+  border: none;
+  background: transparent;
+  font-family: var(--mono);
+}
+
+.view-tab:hover { color: var(--text); }
+
+.view-tab.active {
+  background: var(--bg4);
+  color: var(--accent);
+  border: 1px solid var(--border2);
+}
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  transition: all 0.15s;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text2);
+}
+
+.btn:hover { color: var(--text); border-color: var(--text3); }
+
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.btn-primary:hover { background: var(--accent2); border-color: var(--accent2); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-sm { padding: 5px 10px; font-size: 10px; }
+
+/* ── LAYOUT ── */
+.workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── LEFT PANEL ── */
+.left-panel {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-label {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--text3);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+textarea#prompt {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  resize: none;
+  height: 110px;
+  transition: border-color 0.15s;
+}
+
+textarea#prompt:focus {
+  outline: none;
+  border-color: var(--accent2);
+}
+
+textarea#prompt::placeholder { color: var(--text3); }
+
+.gen-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.gen-btn:hover { background: var(--accent2); }
+.gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Spinner */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0,0,0,0.3);
+  border-top-color: #000;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: none;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.examples-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ex-chip {
+  padding: 4px 9px;
+  font-size: 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text2);
+  transition: all 0.12s;
+  letter-spacing: 0.03em;
+}
+
+.ex-chip:hover {
+  border-color: var(--accent2);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+/* Component list */
+.comp-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.comp-scroll::-webkit-scrollbar { width: 4px; }
+.comp-scroll::-webkit-scrollbar-track { background: transparent; }
+.comp-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.comp-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.comp-id {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+  min-width: 28px;
+  padding-top: 1px;
+}
+
+.comp-info { flex: 1; }
+
+.comp-type {
+  font-size: 11px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.comp-spec {
+  font-size: 10px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+
+.comp-pkg {
+  font-size: 9px;
+  color: var(--text3);
+  margin-top: 3px;
+  padding: 2px 6px;
+  background: var(--bg4);
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid var(--border);
+}
+
+/* ── CANVAS ── */
+.canvas-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.canvas-bar {
+  height: 38px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.canvas-bar-title {
+  font-size: 11px;
+  color: var(--text2);
+  letter-spacing: 0.08em;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.status-pill.ready { background: rgba(0,212,160,0.1); color: var(--accent); border: 1px solid rgba(0,212,160,0.2); }
+.status-pill.thinking { background: rgba(240,160,48,0.1); color: var(--warn); border: 1px solid rgba(240,160,48,0.2); }
+.status-pill.error { background: rgba(224,80,80,0.1); color: var(--error); border: 1px solid rgba(224,80,80,0.2); }
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.dot.pulse { animation: dpulse 1s ease-in-out infinite; }
+@keyframes dpulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+.canvas-bar-right { margin-left: auto; display: flex; gap: 6px; }
+
+.canvas-viewport {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background:
+    radial-gradient(circle at 20px 20px, var(--border) 1px, transparent 1px),
+    radial-gradient(circle at 20px 20px, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: 0 0, 20px 20px;
+}
+
+.canvas-viewport::-webkit-scrollbar { width: 6px; height: 6px; }
+.canvas-viewport::-webkit-scrollbar-track { background: var(--bg2); }
+.canvas-viewport::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+#schematic-svg, #pcb-svg {
+  display: block;
+  max-width: 100%;
+}
+
+.empty-canvas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.empty-canvas .big-icon {
+  width: 64px;
+  height: 64px;
+  border: 2px dashed var(--text3);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+.empty-canvas p {
+  font-size: 12px;
+  color: var(--text2);
+  text-align: center;
+  max-width: 260px;
+  line-height: 1.7;
+}
+
+/* ── RIGHT PANEL ── */
+.right-panel {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--bg2);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.info-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.info-scroll::-webkit-scrollbar { width: 4px; }
+.info-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.info-block {
+  margin-bottom: 16px;
+}
+
+.info-label {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--text3);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.info-text {
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.7;
+}
+
+.spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.spec-key { color: var(--text3); }
+.spec-val { color: var(--text); font-weight: 500; }
+
+.layer-list { display: flex; flex-direction: column; gap: 4px; }
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--bg3);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text2);
+}
+
+.layer-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.export-section {
+  padding: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.export-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text2);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+  letter-spacing: 0.04em;
+}
+
+.export-btn:hover {
+  border-color: var(--accent2);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.export-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.export-icon { font-size: 13px; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0;
+  transition: all 0.2s;
+  pointer-events: none;
+  z-index: 999;
+  white-space: nowrap;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* PCB layer colors */
+.pcb-outline { stroke: #ffcc00; stroke-width: 2; fill: none; }
+.pcb-copper-f { stroke: #c8960a; fill: rgba(200,150,10,0.15); }
+.pcb-copper-b { stroke: #5599ff; fill: rgba(85,153,255,0.1); }
+.pcb-silk-f { fill: #e8e8e8; stroke: none; }
+.pcb-drill { fill: #222; stroke: #555; stroke-width: 0.5; }
+.pcb-via { fill: #888; stroke: #aaa; stroke-width: 0.5; }
+.pcb-courtyard { stroke: #ff00ff; stroke-width: 0.5; fill: none; stroke-dasharray: 3,2; }
+
+/* Schematic styles */
+.sch-wire { stroke: #4af; stroke-width: 1.5; fill: none; }
+.sch-component { stroke: #8af; stroke-width: 1.5; fill: #0f1820; }
+.sch-pin { stroke: #4af; stroke-width: 1; }
+.sch-label { font-family: var(--mono); font-size: 9px; fill: #8af; }
+.sch-value { font-family: var(--mono); font-size: 8px; fill: #5a8a7a; }
+.sch-ref { font-family: var(--mono); font-size: 8px; fill: #7a7aaa; font-style: italic; }
+.sch-net { fill: #4af; }
+.sch-pwr { stroke: #ff9944; stroke-width: 1.5; fill: none; }
+.sch-pwr-label { font-family: var(--mono); font-size: 9px; fill: #ff9944; }
+.sch-gnd-line { stroke: #ff9944; stroke-width: 1.5; }
+
+/* Scrollbar global */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* Responsive tweak for small screens */
+@media (max-width: 900px) {
+  .right-panel { display: none; }
+  .left-panel { width: 260px; }
+}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="7" width="5" height="2" fill="#00d4a0"/>
+        <rect x="10" y="7" width="5" height="2" fill="#00d4a0"/>
+        <rect x="6" y="1" width="4" height="14" rx="1" fill="none" stroke="#00d4a0" stroke-width="1.2"/>
+        <circle cx="8" cy="8" r="1.5" fill="#00d4a0"/>
+      </svg>
+    </div>
+    <span class="logo-name">Circuit Architect</span>
+    <span class="logo-tag">AI-POWERED</span>
+  </div>
+
+  <div class="topbar-sep"></div>
+
+  <div class="view-tabs">
+    <button class="view-tab active" onclick="switchView('schematic')">SCHEMATIC</button>
+    <button class="view-tab" onclick="switchView('pcb')">PCB LAYOUT</button>
+  </div>
+
+  <div class="topbar-right">
+    <button class="btn btn-sm" onclick="zoomIn()">＋ ZOOM</button>
+    <button class="btn btn-sm" onclick="zoomOut()">− ZOOM</button>
+    <button class="btn btn-sm" onclick="fitView()">⊡ FIT</button>
+  </div>
+</div>
+
+<!-- WORKSPACE -->
+<div class="workspace">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div class="panel-section">
+      <div class="panel-label">CIRCUIT DESCRIPTION</div>
+      <textarea id="prompt" placeholder="Describe what your circuit should do…&#10;&#10;e.g. A 555 timer astable circuit that blinks an LED at 2Hz, powered by 9V battery"></textarea>
+      <button class="gen-btn" id="gen-btn" onclick="generateCircuit()">
+        <span class="spinner" id="spinner"></span>
+        <span id="btn-text">⚡ GENERATE CIRCUIT</span>
+      </button>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">EXAMPLES</div>
+      <div class="examples-grid">
+        <div class="ex-chip" onclick="setP('555 timer LED blinker at 2Hz, 9V')">555 blinker</div>
+        <div class="ex-chip" onclick="setP('Voltage divider 12V to 3.3V')">voltage divider</div>
+        <div class="ex-chip" onclick="setP('Low-pass RC filter cutoff 1kHz')">RC filter</div>
+        <div class="ex-chip" onclick="setP('NPN transistor motor driver')">motor driver</div>
+        <div class="ex-chip" onclick="setP('Inverting op-amp gain of 10x')">op-amp</div>
+        <div class="ex-chip" onclick="setP('Arduino LED brightness PWM control')">PWM LED</div>
+        <div class="ex-chip" onclick="setP('Battery powered sensor with voltage regulator 3.3V LDO')">LDO regulator</div>
+        <div class="ex-chip" onclick="setP('H-bridge DC motor controller')">H-bridge</div>
+      </div>
+    </div>
+
+    <div class="panel-label" style="padding: 12px 16px 0; font-size:9px; letter-spacing:0.2em; color:var(--text3);">BILL OF MATERIALS</div>
+    <div class="comp-scroll" id="bom-list">
+      <div style="color:var(--text3); font-size:11px; padding:8px 4px;">No components yet.</div>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-wrap">
+    <div class="canvas-bar">
+      <span class="canvas-bar-title" id="canvas-title">—</span>
+      <div class="status-pill ready" id="status-pill">
+        <div class="dot"></div>
+        <span id="status-text">READY</span>
+      </div>
+      <div class="canvas-bar-right">
+        <button class="btn btn-sm" onclick="copyNetlist()" id="netlist-btn" disabled>NETLIST</button>
+      </div>
+    </div>
+
+    <div class="canvas-viewport" id="canvas-viewport">
+      <div class="empty-canvas" id="empty-canvas">
+        <div class="big-icon">⬡</div>
+        <p>Describe a circuit above and click Generate. The AI will design your schematic and manufacturing-ready PCB layout.</p>
+      </div>
+      <svg id="schematic-svg" style="display:none;" xmlns="http://www.w3.org/2000/svg"></svg>
+      <svg id="pcb-svg" style="display:none;" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="info-scroll">
+      <div class="info-block">
+        <div class="info-label">CIRCUIT INFO</div>
+        <div class="info-text" id="circuit-desc">Generate a circuit to see details here.</div>
+      </div>
+
+      <div class="info-block" id="specs-block" style="display:none;">
+        <div class="info-label">SPECIFICATIONS</div>
+        <div id="specs-table"></div>
+      </div>
+
+      <div class="info-block" id="layers-block" style="display:none;">
+        <div class="info-label">PCB LAYERS</div>
+        <div class="layer-list">
+          <div class="layer-item"><div class="layer-dot" style="background:#ffcc00;"></div>Board Outline (Edge Cuts)</div>
+          <div class="layer-item"><div class="layer-dot" style="background:#c8960a;"></div>Front Copper (F.Cu)</div>
+          <div class="layer-item"><div class="layer-dot" style="background:#5599ff;"></div>Back Copper (B.Cu)</div>
+          <div class="layer-item"><div class="layer-dot" style="background:#e8e8e8;"></div>Front Silkscreen (F.SilkS)</div>
+          <div class="layer-item"><div class="layer-dot" style="background:#888;"></div>Drill Holes (PTH/NPTH)</div>
+          <div class="layer-item"><div class="layer-dot" style="background:#ff00ff; opacity:0.7"></div>Courtyard (F.CrtYd)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="export-section" id="export-section">
+      <div class="panel-label" style="margin-bottom:8px;">EXPORT</div>
+      <button class="export-btn" onclick="exportGerber()" id="exp-gerber" disabled>
+        <span class="export-icon">📦</span> Download Gerbers (.zip)
+      </button>
+      <button class="export-btn" onclick="exportBOM()" id="exp-bom" disabled>
+        <span class="export-icon">📋</span> Download BOM (.csv)
+      </button>
+      <button class="export-btn" onclick="exportDXF()" id="exp-dxf" disabled>
+        <span class="export-icon">📐</span> Download Drill File (.drl)
+      </button>
+      <button class="export-btn" onclick="exportSchematicSVG()" id="exp-svg" disabled>
+        <span class="export-icon">🖼</span> Export Schematic (.svg)
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────
+let currentView = 'schematic';
+let circuitData = null;
+let zoomLevel = 1;
+let generating = false;
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────
+function setP(t) { document.getElementById('prompt').value = t; }
+
+function toast(msg, dur=2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+function setStatus(state, msg) {
+  const pill = document.getElementById('status-pill');
+  const dot = pill.querySelector('.dot');
+  const text = document.getElementById('status-text');
+  pill.className = 'status-pill ' + state;
+  dot.className = 'dot' + (state === 'thinking' ? ' pulse' : '');
+  text.textContent = msg;
+}
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('schematic-svg').style.display = view === 'schematic' ? 'block' : 'none';
+  document.getElementById('pcb-svg').style.display = view === 'pcb' ? 'block' : 'none';
+  if (!circuitData) return;
+}
+
+function zoomIn() { zoomLevel = Math.min(zoomLevel * 1.25, 4); applyZoom(); }
+function zoomOut() { zoomLevel = Math.max(zoomLevel * 0.8, 0.25); applyZoom(); }
+function fitView() { zoomLevel = 1; applyZoom(); }
+
+function applyZoom() {
+  const schSvg = document.getElementById('schematic-svg');
+  const pcbSvg = document.getElementById('pcb-svg');
+  [schSvg, pcbSvg].forEach(s => {
+    s.style.transform = `scale(${zoomLevel})`;
+    s.style.transformOrigin = 'center center';
+  });
+}
+
+// ─── GENERATE ────────────────────────────────────────────────────────────
+async function generateCircuit() {
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt || generating) return;
+  generating = true;
+
+  const btn = document.getElementById('gen-btn');
+  const spinner = document.getElementById('spinner');
+  const btnText = document.getElementById('btn-text');
+  btn.disabled = true;
+  spinner.style.display = 'block';
+  btnText.textContent = 'GENERATING…';
+  setStatus('thinking', 'AI DESIGNING…');
+
+  document.getElementById('empty-canvas').style.display = 'flex';
+  document.getElementById('schematic-svg').style.display = 'none';
+  document.getElementById('pcb-svg').style.display = 'none';
+
+  try {
+    const resp = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || 'Server error');
+    
+    circuitData = data.circuit;
+
+    renderSchematic(circuitData);
+    renderPCB(circuitData);
+    updateInfoPanel(circuitData);
+    enableExports();
+
+    setStatus('ready', 'DESIGN COMPLETE');
+    document.getElementById('canvas-title').textContent = circuitData.name.toUpperCase();
+    toast('✓ Circuit generated successfully');
+
+    // Switch to schematic view
+    switchViewTo('schematic');
+
+  } catch (err) {
+    console.error(err);
+    setStatus('error', 'ERROR');
+    toast('⚠ Generation failed — please try again');
+  }
+
+  btn.disabled = false;
+  spinner.style.display = 'none';
+  btnText.textContent = '⚡ GENERATE CIRCUIT';
+  generating = false;
+}
+
+function switchViewTo(view) {
+  currentView = view;
+  document.querySelectorAll('.view-tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && view === 'schematic') || (i === 1 && view === 'pcb'));
+  });
+  document.getElementById('schematic-svg').style.display = view === 'schematic' ? 'block' : 'none';
+  document.getElementById('pcb-svg').style.display = view === 'pcb' ? 'block' : 'none';
+}
+
+// ─── RENDER SCHEMATIC ──────────────────────────────────────────────────
+function renderSchematic(circuit) {
+  const s = circuit.schematic;
+  const svg = document.getElementById('schematic-svg');
+  const W = s.width || 700;
+  const H = s.height || 480;
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.style.background = '#0a1018';
+  svg.style.borderRadius = '8px';
+  svg.innerHTML = '';
+
+  // Background grid
+  const defs = svgEl('defs');
+  const pat = svgEl('pattern', { id:'grid', width:'20', height:'20', patternUnits:'userSpaceOnUse' });
+  const pl = svgEl('path', { d:'M 20 0 L 0 0 0 20', fill:'none', stroke:'#1a2530', 'stroke-width':'0.5' });
+  pat.appendChild(pl); defs.appendChild(pat); svg.appendChild(defs);
+  svg.appendChild(svgEl('rect', { width:'100%', height:'100%', fill:'url(#grid)' }));
+
+  // Draw wires
+  (s.wires || []).forEach(w => {
+    const line = svgEl('line', {
+      x1:w.x1, y1:w.y1, x2:w.x2, y2:w.y2,
+      stroke: '#3a7aaa', 'stroke-width':'1.5'
+    });
+    svg.appendChild(line);
+  });
+
+  // Power rails
+  (s.power_rails || []).forEach(r => {
+    const g = svgEl('g', { transform:`translate(${r.x},${r.y})` });
+    g.innerHTML = r.type === 'vcc' ? drawSchVCC(r.label) : drawSchGND(r.label);
+    svg.appendChild(g);
+  });
+
+  // Components
+  (s.components || []).forEach(c => {
+    const g = svgEl('g', { transform:`translate(${c.x},${c.y})` });
+    g.innerHTML = drawSchComponent(c);
+    svg.appendChild(g);
+  });
+
+  // Net labels
+  (s.net_labels || []).forEach(nl => {
+    const t = svgEl('text', {
+      x: nl.x, y: nl.y,
+      fill:'#5aaa88',
+      'font-family':'JetBrains Mono,monospace',
+      'font-size':'9',
+      'text-anchor': nl.side === 'right' ? 'start' : 'end'
+    });
+    t.textContent = nl.text;
+    svg.appendChild(t);
+  });
+
+  document.getElementById('empty-canvas').style.display = 'none';
+  svg.style.display = 'block';
+  zoomLevel = 1; applyZoom();
+}
+
+function svgEl(tag, attrs={}) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+function drawSchVCC(label) {
+  return `<line x1="0" y1="0" x2="0" y2="18" stroke="#ff9944" stroke-width="1.5"/>
+    <line x1="-14" y1="0" x2="14" y2="0" stroke="#ff9944" stroke-width="2"/>
+    <text x="0" y="-6" font-family="JetBrains Mono,monospace" font-size="9" fill="#ff9944" text-anchor="middle">${label||'VCC'}</text>`;
+}
+
+function drawSchGND(label) {
+  return `<line x1="0" y1="-18" x2="0" y2="0" stroke="#ff9944" stroke-width="1.5"/>
+    <line x1="-14" y1="0" x2="14" y2="0" stroke="#ff9944" stroke-width="1.5"/>
+    <line x1="-9" y1="6" x2="9" y2="6" stroke="#ff9944" stroke-width="1.5"/>
+    <line x1="-4" y1="12" x2="4" y2="12" stroke="#ff9944" stroke-width="1.5"/>
+    <text x="18" y="4" font-family="JetBrains Mono,monospace" font-size="9" fill="#ff9944">${label||'GND'}</text>`;
+}
+
+function drawSchComponent(c) {
+  const h = c.orient === 'horizontal';
+  const lbl = `<text x="0" y="${h?'-16':'-28'}" font-family="JetBrains Mono,monospace" font-size="8" fill="#7a7aaa" text-anchor="middle" font-style="italic">${c.label||''}</text>
+    <text x="${h?'0':'22'}" y="${h?'22':'4'}" font-family="JetBrains Mono,monospace" font-size="8" fill="#5a8a7a" text-anchor="${h?'middle':'start'}">${c.value||''}</text>`;
+
+  switch(c.type) {
+    case 'resistor': return h ? `
+      <line x1="-35" y1="0" x2="-22" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <rect x="-22" y="-8" width="44" height="16" rx="2" fill="#0f1820" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="22" y1="0" x2="35" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl
+      : `<line x1="0" y1="-35" x2="0" y2="-22" stroke="#3a7aaa" stroke-width="1.5"/>
+      <rect x="-8" y="-22" width="16" height="44" rx="2" fill="#0f1820" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="0" y1="22" x2="0" y2="35" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl;
+
+    case 'capacitor': return h ? `
+      <line x1="-30" y1="0" x2="-6" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="-6" y1="-12" x2="-6" y2="12" stroke="#8899cc" stroke-width="2"/>
+      <line x1="6" y1="-12" x2="6" y2="12" stroke="#8899cc" stroke-width="2"/>
+      <line x1="6" y1="0" x2="30" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl
+      : `<line x1="0" y1="-30" x2="0" y2="-6" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="-12" y1="-6" x2="12" y2="-6" stroke="#8899cc" stroke-width="2"/>
+      <line x1="-12" y1="6" x2="12" y2="6" stroke="#8899cc" stroke-width="2"/>
+      <line x1="0" y1="6" x2="0" y2="30" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl;
+
+    case 'inductor': return h ? `
+      <line x1="-35" y1="0" x2="-20" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <path d="M-20,0 Q-15,-12 -10,0 Q-5,-12 0,0 Q5,-12 10,0 Q15,-12 20,0" fill="none" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="20" y1="0" x2="35" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl
+      : `<line x1="0" y1="-35" x2="0" y2="-20" stroke="#3a7aaa" stroke-width="1.5"/>
+      <path d="M0,-20 Q12,-15 0,-10 Q12,-5 0,0 Q12,5 0,10 Q12,15 0,20" fill="none" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="0" y1="20" x2="0" y2="35" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl;
+
+    case 'led': return `
+      <line x1="0" y1="-35" x2="0" y2="-20" stroke="#3a7aaa" stroke-width="1.5"/>
+      <polygon points="0,-20 -12,-4 12,-4" fill="#0f1820" stroke="#aaccff" stroke-width="1.5"/>
+      <line x1="-12" y1="-4" x2="12" y2="-4" stroke="#aaccff" stroke-width="1.5"/>
+      <line x1="0" y1="-4" x2="0" y2="35" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="10" y1="-14" x2="16" y2="-20" stroke="#ffee88" stroke-width="1" opacity="0.7"/>
+      <line x1="14" y1="-10" x2="20" y2="-16" stroke="#ffee88" stroke-width="1" opacity="0.7"/>` + lbl;
+
+    case 'diode': return `
+      <line x1="0" y1="-35" x2="0" y2="-18" stroke="#3a7aaa" stroke-width="1.5"/>
+      <polygon points="0,-18 -10,-4 10,-4" fill="#0f1820" stroke="#aaccff" stroke-width="1.5"/>
+      <line x1="-10" y1="-4" x2="10" y2="-4" stroke="#aaccff" stroke-width="2"/>
+      <line x1="0" y1="-4" x2="0" y2="35" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl;
+
+    case 'transistor_npn': return `
+      <circle cx="0" cy="0" r="26" fill="#0a1018" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="-26" y1="0" x2="-10" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="-10" y1="-14" x2="-10" y2="14" stroke="#8899cc" stroke-width="2"/>
+      <line x1="-10" y1="-8" x2="18" y2="-22" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="-10" y1="8" x2="18" y2="22" stroke="#8899cc" stroke-width="1.5"/>
+      <polygon points="18,22 12,18 16,12" fill="#8899cc"/>
+      <text x="0" y="38" font-family="JetBrains Mono,monospace" font-size="8" fill="#7a7aaa" text-anchor="middle" font-style="italic">${c.label||''}</text>
+      <text x="0" y="48" font-family="JetBrains Mono,monospace" font-size="7" fill="#5a8a7a" text-anchor="middle">NPN</text>`;
+
+    case 'transistor_pnp': return `
+      <circle cx="0" cy="0" r="26" fill="#0a1018" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="-26" y1="0" x2="-10" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="-10" y1="-14" x2="-10" y2="14" stroke="#8899cc" stroke-width="2"/>
+      <line x1="-10" y1="-8" x2="18" y2="-22" stroke="#8899cc" stroke-width="1.5"/>
+      <polygon points="-10,-8 -4,-12 -4,-4" fill="#8899cc"/>
+      <line x1="-10" y1="8" x2="18" y2="22" stroke="#8899cc" stroke-width="1.5"/>
+      <text x="0" y="38" font-family="JetBrains Mono,monospace" font-size="8" fill="#7a7aaa" text-anchor="middle" font-style="italic">${c.label||''}</text>`;
+
+    case 'op_amp': return `
+      <polygon points="-30,-30 -30,30 28,0" fill="#0f1820" stroke="#8899cc" stroke-width="1.5"/>
+      <text x="-20" y="-10" font-family="JetBrains Mono,monospace" font-size="10" fill="#8899cc">+</text>
+      <text x="-20" y="16" font-family="JetBrains Mono,monospace" font-size="10" fill="#8899cc">−</text>
+      <line x1="-30" y1="-15" x2="-45" y2="-15" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="-30" y1="15" x2="-45" y2="15" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="28" y1="0" x2="45" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <text x="0" y="46" font-family="JetBrains Mono,monospace" font-size="8" fill="#7a7aaa" text-anchor="middle" font-style="italic">${c.label||''}</text>`;
+
+    case 'ic_dip8': case 'ic_soic8': return `
+      <rect x="-40" y="-40" width="80" height="80" rx="4" fill="#0f1820" stroke="#8899cc" stroke-width="1.5"/>
+      <path d="M -5,-40 A 5,5 0 0,1 5,-40" fill="none" stroke="#8899cc" stroke-width="1.5"/>
+      ${[-28,-12,4,20].map((y,i)=>`
+        <line x1="-52" y1="${y}" x2="-40" y2="${y}" stroke="#3a7aaa" stroke-width="1.5"/>
+        <line x1="40" y1="${y}" x2="52" y2="${y}" stroke="#3a7aaa" stroke-width="1.5"/>
+        <text x="-36" y="${y+3}" font-family="JetBrains Mono,monospace" font-size="7" fill="#5a7a6a">${i+1}</text>
+        <text x="28" y="${y+3}" font-family="JetBrains Mono,monospace" font-size="7" fill="#5a7a6a">${8-i}</text>
+      `).join('')}
+      <text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#8aaa88" text-anchor="middle" font-weight="500">${c.value||''}</text>
+      <text x="0" y="54" font-family="JetBrains Mono,monospace" font-size="8" fill="#7a7aaa" text-anchor="middle" font-style="italic">${c.label||''}</text>`;
+
+    case 'voltage_reg': return `
+      <rect x="-28" y="-30" width="56" height="60" rx="3" fill="#0f1820" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="-28" y1="0" x2="-45" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="28" y1="-15" x2="45" y2="-15" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="0" y1="30" x2="0" y2="45" stroke="#3a7aaa" stroke-width="1.5"/>
+      <text x="0" y="2" font-family="JetBrains Mono,monospace" font-size="9" fill="#8aaa88" text-anchor="middle">${c.value||'REG'}</text>
+      <text x="0" y="58" font-family="JetBrains Mono,monospace" font-size="8" fill="#7a7aaa" text-anchor="middle" font-style="italic">${c.label||''}</text>`;
+
+    case 'connector': return `
+      <rect x="-18" y="-32" width="36" height="64" rx="3" fill="#0f1820" stroke="#aabb88" stroke-width="1.5"/>
+      ${[-20,-6,8,22].slice(0,3).map((y,i)=>`
+        <circle cx="0" cy="${y}" r="4" fill="#222" stroke="#aabb88" stroke-width="1"/>
+        <line x1="-18" y1="${y}" x2="-30" y2="${y}" stroke="#3a7aaa" stroke-width="1.5"/>
+        <text x="6" y="${y+3}" font-family="JetBrains Mono,monospace" font-size="7" fill="#8aaa66">${i+1}</text>
+      `).join('')}
+      <text x="0" y="42" font-family="JetBrains Mono,monospace" font-size="8" fill="#7a7aaa" text-anchor="middle" font-style="italic">${c.label||''}</text>`;
+
+    case 'crystal': return `
+      <line x1="-30" y1="0" x2="-14" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="-14" y1="-12" x2="-14" y2="12" stroke="#8899cc" stroke-width="2"/>
+      <rect x="-12" y="-10" width="24" height="20" rx="1" fill="#0f1820" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="12" y1="-12" x2="12" y2="12" stroke="#8899cc" stroke-width="2"/>
+      <line x1="14" y1="0" x2="30" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl;
+
+    case 'switch': return h ? `
+      <line x1="-28" y1="0" x2="-10" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <circle cx="-10" cy="0" r="3" fill="#3a7aaa"/>
+      <circle cx="10" cy="0" r="3" fill="#3a7aaa"/>
+      <line x1="-10" y1="0" x2="8" y2="-10" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="10" y1="0" x2="28" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl
+      : `<line x1="0" y1="-28" x2="0" y2="-10" stroke="#3a7aaa" stroke-width="1.5"/>
+      <circle cx="0" cy="-10" r="3" fill="#3a7aaa"/>
+      <circle cx="0" cy="10" r="3" fill="#3a7aaa"/>
+      <line x1="0" y1="-10" x2="-10" y2="8" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="0" y1="10" x2="0" y2="28" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl;
+
+    case 'battery': return `
+      <line x1="0" y1="-35" x2="0" y2="-8" stroke="#3a7aaa" stroke-width="1.5"/>
+      <line x1="-14" y1="-8" x2="14" y2="-8" stroke="#8899cc" stroke-width="2.5"/>
+      <line x1="-8" y1="0" x2="8" y2="0" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="-14" y1="8" x2="14" y2="8" stroke="#8899cc" stroke-width="2.5"/>
+      <line x1="-8" y1="16" x2="8" y2="16" stroke="#8899cc" stroke-width="1.5"/>
+      <line x1="0" y1="16" x2="0" y2="35" stroke="#3a7aaa" stroke-width="1.5"/>
+      <text x="-18" y="-4" font-family="JetBrains Mono,monospace" font-size="9" fill="#ff9944">+</text>
+      <text x="-18" y="20" font-family="JetBrains Mono,monospace" font-size="9" fill="#ff9944">−</text>` + lbl;
+
+    case 'fuse': return h ? `
+      <line x1="-30" y1="0" x2="-18" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>
+      <rect x="-18" y="-8" width="36" height="16" rx="8" fill="#0f1820" stroke="#ffaa44" stroke-width="1.5"/>
+      <line x1="-10" y1="0" x2="10" y2="0" stroke="#ffaa44" stroke-width="1" stroke-dasharray="3,2"/>
+      <line x1="18" y1="0" x2="30" y2="0" stroke="#3a7aaa" stroke-width="1.5"/>` + lbl : lbl;
+
+    default: return `
+      <rect x="-28" y="-20" width="56" height="40" rx="3" fill="#0f1820" stroke="#8899cc" stroke-width="1.5"/>
+      <text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="9" fill="#8aaa88" text-anchor="middle">${c.type||'?'}</text>
+      <text x="0" y="30" font-family="JetBrains Mono,monospace" font-size="8" fill="#7a7aaa" text-anchor="middle" font-style="italic">${c.label||''}</text>`;
+  }
+}
+
+// ─── RENDER PCB ────────────────────────────────────────────────────────
+function renderPCB(circuit) {
+  const pcb = circuit.pcb;
+  const svg = document.getElementById('pcb-svg');
+  const W = pcb.board_width || 500;
+  const H = pcb.board_height || 380;
+  const M = pcb.margin || 30;
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.style.borderRadius = '8px';
+  svg.innerHTML = '';
+
+  // PCB background
+  svg.appendChild(svgEl('rect', { width:W, height:H, fill:'#0d1a12', rx:'8' }));
+
+  // Board area
+  const bw = W - M*2, bh = H - M*2;
+  svg.appendChild(svgEl('rect', {
+    x:M, y:M, width:bw, height:bh,
+    fill:'#142a1e', rx:'4',
+    stroke:'#ffcc00', 'stroke-width':'1.5'
+  }));
+
+  // Grid
+  for (let x = M+20; x < W-M; x += 20) {
+    const l = svgEl('line', { x1:x, y1:M, x2:x, y2:H-M, stroke:'#1a3028', 'stroke-width':'0.5' });
+    svg.appendChild(l);
+  }
+  for (let y = M+20; y < H-M; y += 20) {
+    const l = svgEl('line', { x1:M, y1:y, x2:W-M, y2:y, stroke:'#1a3028', 'stroke-width':'0.5' });
+    svg.appendChild(l);
+  }
+
+  // Corner markers
+  [[M,M],[W-M,M],[M,H-M],[W-M,H-M]].forEach(([cx,cy]) => {
+    const g = svgEl('g');
+    g.appendChild(svgEl('line', { x1:cx-8, y1:cy, x2:cx+8, y2:cy, stroke:'#ffcc00', 'stroke-width':'1' }));
+    g.appendChild(svgEl('line', { x1:cx, y1:cy-8, x2:cx, y2:cy+8, stroke:'#ffcc00', 'stroke-width':'1' }));
+    svg.appendChild(g);
+  });
+
+  // Traces (back copper first)
+  (pcb.traces || []).filter(t => t.layer === 'back').forEach(t => drawTrace(svg, t, '#3355aa', t.width||0.4));
+  (pcb.traces || []).filter(t => t.layer !== 'back').forEach(t => drawTrace(svg, t, '#c8960a', t.width||0.4));
+
+  // Vias
+  (pcb.vias || []).forEach(v => {
+    const outer = (v.outer || 1.6) * 6;
+    const drill = (v.drill || 0.8) * 6;
+    svg.appendChild(svgEl('circle', { cx:v.x, cy:v.y, r:outer/2, fill:'#888', stroke:'#bbb', 'stroke-width':'0.5' }));
+    svg.appendChild(svgEl('circle', { cx:v.x, cy:v.y, r:drill/2, fill:'#0a0f0d' }));
+  });
+
+  // Components
+  (pcb.components || []).forEach(comp => {
+    drawPCBComponent(svg, comp);
+  });
+
+  // Dimension labels
+  const dimY = H - M + 14;
+  addText(svg, M, dimY, `0`, '#ffcc00', 8, 'middle');
+  addText(svg, W-M, dimY, `${bw}`, '#ffcc00', 8, 'middle');
+  addText(svg, M/2, M + bh/2, `${bh}`, '#ffcc00', 8, 'middle');
+
+  svg.style.display = 'none'; // hidden until tab switch
+}
+
+function drawTrace(svg, trace, color, widthMm) {
+  if (!trace.points || trace.points.length < 2) return;
+  const w = Math.max(widthMm * 5, 2);
+  for (let i = 0; i < trace.points.length - 1; i++) {
+    const [x1,y1] = trace.points[i];
+    const [x2,y2] = trace.points[i+1];
+    const line = svgEl('line', {
+      x1, y1, x2, y2,
+      stroke: color,
+      'stroke-width': w,
+      'stroke-linecap': 'round'
+    });
+    svg.appendChild(line);
+  }
+}
+
+function drawPCBComponent(svg, comp) {
+  const g = svgEl('g');
+
+  // Courtyard
+  const padXs = (comp.pads||[]).map(p=>p.x);
+  const padYs = (comp.pads||[]).map(p=>p.y);
+  const padWs = (comp.pads||[]).map(p=>p.w||10);
+  const padHs = (comp.pads||[]).map(p=>p.h||10);
+  if (padXs.length) {
+    const minX = Math.min(...padXs) - Math.max(...padWs)/2 - 4;
+    const minY = Math.min(...padYs) - Math.max(...padHs)/2 - 4;
+    const maxX = Math.max(...padXs) + Math.max(...padWs)/2 + 4;
+    const maxY = Math.max(...padYs) + Math.max(...padHs)/2 + 4;
+    g.appendChild(svgEl('rect', {
+      x:minX, y:minY, width:maxX-minX, height:maxY-minY,
+      fill:'none', stroke:'#ff00ff', 'stroke-width':'0.5',
+      'stroke-dasharray':'3,2', rx:'2', opacity:'0.5'
+    }));
+  }
+
+  // Pads
+  (comp.pads || []).forEach(pad => {
+    const pw = pad.w || 10;
+    const ph = pad.h || 10;
+    const isThruHole = pad.drill != null;
+
+    if (isThruHole) {
+      g.appendChild(svgEl('circle', { cx:pad.x, cy:pad.y, r:pw/2, fill:'#c8960a', stroke:'#f0c030', 'stroke-width':'0.5' }));
+      g.appendChild(svgEl('circle', { cx:pad.x, cy:pad.y, r:(pad.drill||0.8)*3, fill:'#0a0f0d' }));
+    } else {
+      g.appendChild(svgEl('rect', {
+        x:pad.x - pw/2, y:pad.y - ph/2,
+        width:pw, height:ph,
+        fill:'#c8960a', rx:'1', stroke:'#f0c030', 'stroke-width':'0.5'
+      }));
+    }
+    // Pin number
+    const pt = svgEl('text', { x:pad.x, y:pad.y+3, 'font-family':'JetBrains Mono,monospace', 'font-size':'6', fill:'#0a0f0d', 'text-anchor':'middle', 'font-weight':'600' });
+    pt.textContent = pad.num;
+    g.appendChild(pt);
+  });
+
+  // Silkscreen label
+  if (padXs.length) {
+    const cx = padXs.reduce((a,b)=>a+b,0)/padXs.length;
+    const cy = Math.min(...padYs) - Math.max(...padHs)/2 - 8;
+    addText(g, cx, cy, comp.id, '#e8e8e8', 8, 'middle');
+  }
+
+  svg.appendChild(g);
+}
+
+function addText(parent, x, y, text, fill, size, anchor='start') {
+  const t = svgEl('text', {
+    x, y,
+    fill,
+    'font-family':'JetBrains Mono,monospace',
+    'font-size': size,
+    'text-anchor': anchor
+  });
+  t.textContent = text;
+  parent.appendChild(t);
+  return t;
+}
+
+// ─── UI UPDATES ───────────────────────────────────────────────────────
+function updateInfoPanel(circuit) {
+  // BOM
+  const bomEl = document.getElementById('bom-list');
+  bomEl.innerHTML = '';
+  (circuit.components || []).forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'comp-card';
+    div.innerHTML = `<div class="comp-id">${c.id}</div>
+      <div class="comp-info">
+        <div class="comp-type">${c.type}</div>
+        <div class="comp-spec">${c.value}</div>
+        <span class="comp-pkg">${c.package || '—'}</span>
+      </div>`;
+    bomEl.appendChild(div);
+  });
+
+  // Description
+  document.getElementById('circuit-desc').textContent = circuit.description || '';
+
+  // Specs
+  const specsBlock = document.getElementById('specs-block');
+  const specsTable = document.getElementById('specs-table');
+  if (circuit.specs) {
+    specsBlock.style.display = 'block';
+    specsTable.innerHTML = Object.entries(circuit.specs).map(([k,v]) =>
+      `<div class="spec-row"><span class="spec-key">${k.replace(/_/g,' ')}</span><span class="spec-val">${v}</span></div>`
+    ).join('');
+  }
+
+  // Layers
+  document.getElementById('layers-block').style.display = 'block';
+}
+
+function enableExports() {
+  ['exp-gerber','exp-bom','exp-dxf','exp-svg','netlist-btn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+}
+
+// ─── EXPORTS ──────────────────────────────────────────────────────────
+function exportGerber() {
+  if (!circuitData) return;
+  const c = circuitData;
+  const pcb = c.pcb;
+  const W = pcb.board_width || 500;
+  const H = pcb.board_height || 380;
+  const M = pcb.margin || 30;
+  const scale = 25.4 / 96; // px to mm at 96dpi, then to Gerber units (mm)
+
+  const gerbDate = new Date().toISOString().split('T')[0].replace(/-/g,'');
+
+  // Edge Cuts (board outline)
+  const edgeCuts = `G04 Circuit Architect - Edge Cuts*
+%FSLAX46Y46*%
+%MOMM*%
+%LPD*%
+G01*
+%ADD10C,0.050000*%
+D10*
+X${Math.round((M)*1000)}Y${Math.round(-(M)*1000)}D02*
+X${Math.round((W-M)*1000)}Y${Math.round(-(M)*1000)}D01*
+X${Math.round((W-M)*1000)}Y${Math.round(-(H-M)*1000)}D01*
+X${Math.round((M)*1000)}Y${Math.round(-(H-M)*1000)}D01*
+X${Math.round((M)*1000)}Y${Math.round(-(M)*1000)}D01*
+M02*`;
+
+  // Front Copper
+  let fcu = `G04 Circuit Architect - F.Cu*\n%FSLAX46Y46*%\n%MOMM*%\n%LPD*%\nG01*\n%ADD10C,0.200000*%\nD10*\n`;
+  (pcb.traces || []).filter(t => t.layer !== 'back').forEach(t => {
+    if (!t.points || t.points.length < 2) return;
+    const w = ((t.width || 0.4) * 1000).toFixed(0);
+    fcu += `%ADD11C,${((t.width||0.4)).toFixed(6)}*%\nD11*\n`;
+    t.points.forEach((pt, i) => {
+      fcu += `X${Math.round(pt[0]*1000)}Y${Math.round(-pt[1]*1000)}${i===0?'D02':'D01'}*\n`;
+    });
+  });
+  fcu += 'M02*';
+
+  // Drill file (Excellon)
+  let drill = `M48\n; Circuit Architect Drill File\n; ${gerbDate}\nFMET\nMETRIC,TZ\n`;
+  drill += `T01F00S00C0.800\nT02F00S00C1.000\n%\nG90\nG05\nM72\nT01\n`;
+  (pcb.vias || []).forEach(v => {
+    drill += `X${(v.x/10).toFixed(3)}Y${(-v.y/10).toFixed(3)}\n`;
+  });
+  (pcb.components || []).forEach(comp => {
+    (comp.pads || []).forEach(pad => {
+      if (pad.drill) drill += `X${(pad.x/10).toFixed(3)}Y${(-pad.y/10).toFixed(3)}\n`;
+    });
+  });
+  drill += 'T00\nM30';
+
+  // Front Silkscreen
+  let fsilk = `G04 Circuit Architect - F.SilkS*\n%FSLAX46Y46*%\n%MOMM*%\n%LPD*%\nG01*\n`;
+  fsilk += 'M02*';
+
+  // Readme
+  const readme = `Circuit Architect — Gerber Export
+Generated: ${new Date().toISOString()}
+Circuit: ${c.name}
+
+FILES:
+  ${c.name.replace(/\s+/g,'_')}-Edge_Cuts.gbr   Board outline
+  ${c.name.replace(/\s+/g,'_')}-F_Cu.gbr         Front copper layer
+  ${c.name.replace(/\s+/g,'_')}-F_SilkS.gbr      Front silkscreen
+  ${c.name.replace(/\s+/g,'_')}-drill.drl         Drill file (Excellon)
+
+BOARD SPECS:
+  Size: ${pcb.board_width - pcb.margin*2}x${pcb.board_height - pcb.margin*2}px
+  Layers: 2
+  Min trace: 0.2mm
+  Min drill: 0.8mm
+
+COMPONENTS: ${(c.components||[]).length}
+${(c.components||[]).map(comp=>`  ${comp.id}: ${comp.type} ${comp.value} (${comp.package})`).join('\n')}
+
+This design was generated by Circuit Architect (https://circuit-architect.ai).
+Verify all values before manufacturing.`;
+
+  // Create zip-like blob (just a text bundle in a .zip-like download)
+  // Since we can't use JSZip without CDN, we bundle as a tar-like text file
+  // Actually let's create individual files and prompt download
+  const files = {
+    [`${c.name.replace(/\s+/g,'_')}-Edge_Cuts.gbr`]: edgeCuts,
+    [`${c.name.replace(/\s+/g,'_')}-F_Cu.gbr`]: fcu,
+    [`${c.name.replace(/\s+/g,'_')}-F_SilkS.gbr`]: fsilk,
+    [`${c.name.replace(/\s+/g,'_')}-drill.drl`]: drill,
+    'README.txt': readme
+  };
+
+  // Download each file (bundle as named downloads)
+  Object.entries(files).forEach(([name, content], i) => {
+    setTimeout(() => {
+      const blob = new Blob([content], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }, i * 150);
+  });
+
+  toast('📦 Downloading Gerber files…');
+}
+
+function exportBOM() {
+  if (!circuitData) return;
+  const c = circuitData;
+  let csv = 'Reference,Type,Value,Package,Purpose,Quantity\n';
+  (c.components || []).forEach(comp => {
+    csv += `"${comp.id}","${comp.type}","${comp.value}","${comp.package||'—'}","${comp.purpose||'—'}",1\n`;
+  });
+  csv += `\n"Design","${c.name}"\n"Generated","${new Date().toISOString()}"\n`;
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${c.name.replace(/\s+/g,'_')}_BOM.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('📋 BOM downloaded');
+}
+
+function exportDXF() {
+  if (!circuitData) return;
+  const pcb = circuitData.pcb;
+  const M = pcb.margin || 30;
+  const W = pcb.board_width - M*2;
+  const H = pcb.board_height - M*2;
+
+  const drl = `M48
+; Circuit Architect — Drill File (Excellon)
+; Design: ${circuitData.name}
+; Date: ${new Date().toISOString()}
+FMAT,2
+METRIC,TZ
+T01F00S00C0.800
+T02F00S00C1.000
+%
+G90
+G05
+M72
+T01
+${(circuitData.pcb.vias||[]).map(v=>`X${(v.x/10).toFixed(3)}Y${(-v.y/10).toFixed(3)}`).join('\n')}
+${(circuitData.pcb.components||[]).flatMap(c=>(c.pads||[]).filter(p=>p.drill).map(p=>`X${(p.x/10).toFixed(3)}Y${(-p.y/10).toFixed(3)}`)).join('\n')}
+T00
+M30`;
+
+  const blob = new Blob([drl], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${circuitData.name.replace(/\s+/g,'_')}.drl`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('📐 Drill file downloaded');
+}
+
+function exportSchematicSVG() {
+  if (!circuitData) return;
+  const svg = document.getElementById('schematic-svg');
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(svg);
+  const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${circuitData.name.replace(/\s+/g,'_')}_schematic.svg`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('🖼 Schematic SVG downloaded');
+}
+
+function copyNetlist() {
+  if (!circuitData) return;
+  const nl = (circuitData.netlist || []).map(n =>
+    `${n.net}: ${n.pins.join(', ')}`
+  ).join('\n');
+  navigator.clipboard.writeText(nl).then(() => toast('Netlist copied to clipboard'));
+}
+
+// Tab switch handler (also updates canvas visibility)
+document.querySelectorAll('.view-tab').forEach((tab, i) => {
+  tab.addEventListener('click', () => {
+    const view = i === 0 ? 'schematic' : 'pcb';
+    if (!circuitData) return;
+    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('schematic-svg').style.display = view === 'schematic' ? 'block' : 'none';
+    document.getElementById('pcb-svg').style.display = view === 'pcb' ? 'block' : 'none';
+    currentView = view;
+  });
+});
+
+// Enter to generate
+document.getElementById('prompt').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) generateCircuit();
+});
+</script>
+</body>
+</html>
