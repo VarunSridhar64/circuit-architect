@@ -7,6 +7,8 @@ const router = express.Router();
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+const MAX_DRC_ITERATIONS = 5;
+
 function buildSystemPrompt() {
   return `You are a world-class EDA (Electronic Design Automation) AI with deep knowledge of electronics engineering, PCB design, IPC-2221 standards, JLCPCB design rules, and all major component families from Yageo, Murata, TI, Microchip, Infineon, ST, ADI, onsemi, Vishay, Panasonic, NXP, Bosch, Maxim, Espressif, Nexperia, Bourns, Diodes Inc, Fairchild, Samsung, Kemet, Lite-On, Kingbright, JST, Molex, and more.
 
@@ -29,20 +31,49 @@ You have ENCYCLOPEDIC knowledge of every standard component, MPN, package, and d
 - Crystals: 16MHz HC-49/US (ABLS-16.000MHZ), 32.768kHz SMD
 - Connectors: JST PH series, Molex KK, USB-C GCT USB4085, DC barrel PJ-002A
 
-DESIGN RULES (IPC-2221 / JLCPCB):
-- Min trace 0.1mm (prefer 0.2mm); min clearance 0.1mm
-- Min drill 0.3mm (prefer 0.8mm for THT); min annular ring 0.13mm
-- Min via: drill 0.3mm, outer 0.6mm
-- Board edge clearance 0.3mm minimum
-- Bypass cap 100nF on EVERY IC VCC pin, placed within 5mm
+DESIGN RULES (IPC-2221 / JLCPCB — STRICT):
+- Min trace 0.2mm (use 0.3mm for power, 0.5mm for >1A)
+- Min clearance trace-to-trace / trace-to-pad 0.2mm
+- Min drill 0.3mm; min via drill 0.3mm with 0.6mm outer (annular ring ≥0.15mm)
+- Board edge clearance ≥0.5mm (use margin ≥35 in SVG units)
+- Bypass cap 100nF on EVERY IC VCC pin (placed within 5mm)
 - Bulk cap 10µF near power entry
-- Trace current capacity: 0.2mm ~500mA, 0.5mm ~1A, 1mm ~2A
+- Component-to-component spacing ≥2mm (≥20 SVG units center-to-center)
+- Polarized components must have correct orientation marking
 
-ERC RULES:
-- Every VCC net must be connected to a power source
-- No floating inputs — pull up or pull down
-- Polarized components need correct orientation
+ERC RULES (STRICT — all must pass):
+- Every VCC/power net and GND net MUST appear in the netlist
+- No floating inputs — pull up or pull down with 10k
+- Polarized components (LED, diode, electrolytic cap) need correct orientation
 - LED current-limiting: R = (Vsupply - Vf) / 20mA where Vf=2V red/green, 3.3V blue/white
+- Every IC must have a decoupling capacitor (100nF ceramic, type must include "cap")
+
+SCHEMATIC RULES (KiCAD-style professional schematics):
+- Use grid-snap: all component x/y should be multiples of 10
+- Components on a canvas: schematic.width ≥ 900, schematic.height ≥ 620
+- Leave 80px around the border for title block and routing
+- Wires orthogonal only (horizontal/vertical), no diagonals
+- Use power flag symbols (power_rails) for VCC and GND — don't wire them to arbitrary points
+- Add net_labels for named internal nets (OUT, CLK, DATA, etc.)
+- Spread components out — at least 80px between centers
+- Supported component "type" values: resistor, capacitor, capacitor_pol, inductor, led, diode, transistor_npn, transistor_pnp, mosfet_n, op_amp, ic_dip8, ic_dip14, ic_dip16, voltage_reg, connector, crystal, battery, switch
+- Use "orient": "horizontal" or "vertical" for 2-pin components
+- For connectors, include "pins": <number>
+- Always provide "label" (reference designator like R1, C1) and "value"
+
+PCB RULES (Altium/KiCAD-style realistic layout):
+- board_width ≥ 520, board_height ≥ 400, margin = 35 (SVG units; 1 unit ≈ 0.1mm)
+- All component x,y must be within (margin+15) to (board_width-margin-15) and (margin+15) to (board_height-margin-15)
+- Component centers must be ≥25 units apart (no overlap)
+- Traces orthogonal or 45° only; use intermediate points in "points" array for corners
+- Trace width: 0.3mm for signal, 0.5mm for power
+- Pads sized correctly for package:
+  * 0805: pads 18x14 at x±16 (center distance 32)
+  * 0603: pads 14x12 at x±12
+  * SOIC-8: 8 pads 14x6, spaced 12.7 apart, two rows 60 apart
+  * DIP-8: 8 through-hole pads with drill 0.8, at rows 90 apart, spacing 25
+  * TO-220: 3 TH pads spaced 50 apart
+- Use "package" field matching common footprints: 0805, 0603, SOIC-8, DIP-8, TO-220, TO-92, SOT-23, QFP-32, electrolytic_radial
 
 Return this EXACT JSON schema:
 {
@@ -50,7 +81,7 @@ Return this EXACT JSON schema:
   "description": "3-4 sentence technical explanation",
   "specs": {
     "supply_voltage": "9V", "current_draw": "~15mA", "board_size": "50x40mm",
-    "layers": "2", "min_trace": "0.2mm", "min_drill": "0.8mm",
+    "layers": "2", "min_trace": "0.3mm", "min_drill": "0.3mm",
     "operating_temp": "-40°C to +85°C"
   },
   "components": [
@@ -58,7 +89,7 @@ Return this EXACT JSON schema:
       "id": "R1", "mpn": "RC0805FR-0710KL", "mfr": "Yageo",
       "type": "Resistor", "value": "10kΩ", "package": "0805",
       "purpose": "Pull-up on RESET", "quantity": 1,
-      "datasheet": "https://www.yageo.com/upload/media/product/productsearch/datasheet/rchip/PYu-RC_Group_51_RoHS_L_12.pdf"
+      "datasheet": "https://www.yageo.com/..."
     }
   ],
   "netlist": [
@@ -67,27 +98,99 @@ Return this EXACT JSON schema:
   ],
   "design_notes": ["Keep crystal traces short", "Add bypass cap near U1"],
   "schematic": {
-    "width": 700, "height": 500,
-    "components": [{"id":"R1","type":"resistor","x":350,"y":200,"orient":"horizontal","label":"R1","value":"10kΩ"}],
-    "wires": [{"x1":100,"y1":60,"x2":100,"y2":420}],
-    "power_rails": [{"type":"vcc","x":100,"y":50,"label":"VCC"},{"type":"gnd","x":350,"y":460,"label":"GND"}],
-    "net_labels": []
+    "width": 900, "height": 620,
+    "components": [{"id":"R1","type":"resistor","x":360,"y":240,"orient":"horizontal","label":"R1","value":"10kΩ"}],
+    "wires": [{"x1":100,"y1":100,"x2":100,"y2":400}],
+    "power_rails": [{"type":"vcc","x":100,"y":80,"label":"VCC"},{"type":"gnd","x":360,"y":420,"label":"GND"}],
+    "net_labels": [{"x":500,"y":240,"text":"OUT","side":"right"}]
   },
   "pcb": {
     "board_width": 520, "board_height": 400, "margin": 35,
-    "components": [{"id":"R1","package":"0805","x":140,"y":180,"rotation":0,"side":"front","pads":[{"num":1,"x":128,"y":180,"w":16,"h":12},{"num":2,"x":152,"y":180,"w":16,"h":12}]}],
+    "components": [{"id":"R1","package":"0805","x":140,"y":180,"rotation":0,"side":"front","pads":[{"num":1,"x":124,"y":180,"w":18,"h":14},{"num":2,"x":156,"y":180,"w":18,"h":14}]}],
     "traces": [{"net":"VCC","layer":"front","width":0.4,"points":[[80,90],[140,90],[140,180]]}],
     "vias": []
   }
 }
 
 CRITICAL REQUIREMENTS:
-1. Include decoupling caps (100nF + 10µF) near every IC
-2. All PCB component x,y must be within margin to (board_width-margin)
+1. Include decoupling caps (100nF + 10µF) near every IC with type containing "cap"
+2. All PCB component x,y must be within margin+15 to (board_width-margin-15)
 3. Schematic wires must be orthogonal (horizontal/vertical only)
 4. Always include real MPN and datasheet URL for every component
 5. LED resistor values must be calculated from V=IR
-6. Return ONLY the JSON object — no other text`;
+6. At least one component must have type including "cap" per IC
+7. netlist must include both a GND net AND a power net (VCC/VDD/+5V/+3V3/etc.)
+8. Return ONLY the JSON object — no other text`;
+}
+
+function buildRepairPrompt(circuit, drc, iteration) {
+  const errs = (drc.violations||[]).map(v => `- [${v.code||'ERR'}] ${v.detail}`).join('\n') || '(none)';
+  const warns = (drc.warnings||[]).map(v => `- [${v.code||'WARN'}] ${v.detail}`).join('\n') || '(none)';
+  return `You previously generated this circuit JSON. The DRC/ERC engine found violations that must be fixed.
+
+Current DRC score: ${drc.score}%
+Iteration: ${iteration} / ${MAX_DRC_ITERATIONS}
+
+VIOLATIONS (must fix):
+${errs}
+
+WARNINGS (should fix for 100% score):
+${warns}
+
+Here is the current circuit (you must return a fully corrected version):
+${JSON.stringify(circuit)}
+
+Return ONLY the corrected JSON — full circuit object, same schema. Fix every violation AND every warning. Specifically:
+- If "IC missing bypass capacitor", add a 100nF capacitor component (type must include "cap") near every IC, add it to PCB with correct 0805 pads, and connect via netlist
+- If "No GND/power net", add them to netlist with the appropriate pins
+- If components overlap on PCB, move them apart (≥25 SVG units)
+- If a component is too close to the board edge, shift it inward or enlarge the board
+- If trace width is too small, increase it to 0.3mm or 0.5mm
+- If via drill/annular ring is too small, set drill=0.3, outer=0.8
+Return ONLY the full corrected JSON object.`;
+}
+
+async function callAI(systemPrompt, userMessage, maxTokens = 6000) {
+  if (GROQ_API_KEY) {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ]
+      })
+    });
+    if (!response.ok) throw new Error(`Groq: ${response.status}`);
+    const data = await response.json();
+    return data.choices[0].message.content.trim();
+  }
+  if (ANTHROPIC_API_KEY) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }]
+      })
+    });
+    if (!response.ok) throw new Error(`Anthropic: ${response.status}`);
+    const data = await response.json();
+    return (data.content || []).map(b => b.text || '').join('').trim();
+  }
+  throw new Error('No AI API key configured');
+}
+
+function extractJSON(raw) {
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('AI returned no valid JSON');
+  return JSON.parse(m[0]);
 }
 
 // POST /api/generate
@@ -99,56 +202,60 @@ router.post('/', async (req, res) => {
   const systemPrompt = buildSystemPrompt();
 
   try {
-    let rawText = '';
+    // ── Initial generation ──
+    const rawText = await callAI(systemPrompt, prompt);
+    let circuit = extractJSON(rawText);
+    let drc = runDRC(circuit);
 
-    // Try Groq first, fall back to Anthropic
-    if (GROQ_API_KEY) {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          max_tokens: 6000,
-          temperature: 0.2,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt }
-          ]
-        })
-      });
-      if (!response.ok) throw new Error(`Groq: ${response.status}`);
-      const data = await response.json();
-      rawText = data.choices[0].message.content.trim();
+    const iterationLog = [{
+      iteration: 0,
+      score: drc.score,
+      violations: drc.violations.length,
+      warnings: drc.warnings.length
+    }];
 
-    } else if (ANTHROPIC_API_KEY) {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 6000,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: prompt }]
-        })
-      });
-      if (!response.ok) throw new Error(`Anthropic: ${response.status}`);
-      const data = await response.json();
-      rawText = (data.content || []).map(b => b.text || '').join('').trim();
+    // ── Iterative DRC/ERC repair loop ──
+    let iteration = 1;
+    while (drc.score < 100 && iteration <= MAX_DRC_ITERATIONS) {
+      try {
+        const repairPrompt = buildRepairPrompt(circuit, drc, iteration);
+        const repairRaw = await callAI(systemPrompt, repairPrompt);
+        const repaired = extractJSON(repairRaw);
+        const newDrc = runDRC(repaired);
 
-    } else {
-      return res.status(500).json({ error: 'No AI API key configured' });
+        iterationLog.push({
+          iteration,
+          score: newDrc.score,
+          violations: newDrc.violations.length,
+          warnings: newDrc.warnings.length
+        });
+
+        // Accept the repair only if it didn't regress
+        if (newDrc.score >= drc.score) {
+          circuit = repaired;
+          drc = newDrc;
+        }
+
+        if (drc.score >= 100) break;
+      } catch (e) {
+        iterationLog.push({ iteration, error: e.message });
+        break;
+      }
+      iteration++;
     }
 
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return res.status(500).json({ error: 'AI returned no valid JSON' });
-
-    const circuit = JSON.parse(jsonMatch[0]);
-
-    // Run DRC + simulation server-side
-    const drc = runDRC(circuit);
     const simulation = simulateCircuit(circuit);
 
-    res.json({ circuit, drc, simulation });
+    res.json({
+      circuit,
+      drc,
+      simulation,
+      repair: {
+        iterations: iterationLog,
+        final_score: drc.score,
+        converged: drc.score >= 100
+      }
+    });
 
   } catch (err) {
     console.error('Generate error:', err.message);
@@ -168,6 +275,40 @@ router.post('/simulate', (req, res) => {
   const { circuit } = req.body;
   if (!circuit) return res.status(400).json({ error: 'circuit required' });
   res.json(simulateCircuit(circuit));
+});
+
+// POST /api/generate/repair — manually re-run a repair iteration
+router.post('/repair', async (req, res) => {
+  const { circuit } = req.body;
+  if (!circuit) return res.status(400).json({ error: 'circuit required' });
+  try {
+    const systemPrompt = buildSystemPrompt();
+    let current = circuit;
+    let drc = runDRC(current);
+    const log = [{ iteration: 0, score: drc.score, violations: drc.violations.length, warnings: drc.warnings.length }];
+
+    let iteration = 1;
+    while (drc.score < 100 && iteration <= MAX_DRC_ITERATIONS) {
+      const repairPrompt = buildRepairPrompt(current, drc, iteration);
+      const raw = await callAI(systemPrompt, repairPrompt);
+      const repaired = extractJSON(raw);
+      const newDrc = runDRC(repaired);
+      log.push({ iteration, score: newDrc.score, violations: newDrc.violations.length, warnings: newDrc.warnings.length });
+      if (newDrc.score >= drc.score) { current = repaired; drc = newDrc; }
+      if (drc.score >= 100) break;
+      iteration++;
+    }
+
+    res.json({
+      circuit: current,
+      drc,
+      simulation: simulateCircuit(current),
+      repair: { iterations: log, final_score: drc.score, converged: drc.score >= 100 }
+    });
+  } catch (err) {
+    console.error('Repair error:', err.message);
+    res.status(500).json({ error: 'Repair failed: ' + err.message });
+  }
 });
 
 module.exports = router;
