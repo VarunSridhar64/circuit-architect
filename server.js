@@ -1,11 +1,11 @@
 const express = require('express');
-const fetch = require('node-fetch');
 const cors = require('cors');
 const path = require('path');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
@@ -13,13 +13,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', hasKey: !!ANTHROPIC_API_KEY });
+  res.json({ status: 'ok', hasKey: !!GEMINI_API_KEY });
 });
 
-// Secure Anthropic API proxy — key never sent to browser
+// Secure Gemini API proxy — key never sent to browser
 app.post('/api/generate', async (req, res) => {
-  if (!ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server.' });
+  if (!GEMINI_API_KEY) {
+    return res.status(500).json({ error: 'GEMINI_API_KEY not configured on server.' });
   }
 
   const { prompt } = req.body;
@@ -115,28 +115,12 @@ Design rules:
 - CRITICAL: Return ONLY the JSON object, no other text`;
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      return res.status(response.status).json({ error: err.error?.message || 'Anthropic API error' });
-    }
+    const result = await model.generateContent(systemPrompt + '\n\nUser request: ' + prompt);
+    const raw = result.response.text().trim();
 
-    const data = await response.json();
-    const raw = (data.content || []).map(b => b.text || '').join('').trim();
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'No valid JSON in AI response' });
 
@@ -156,7 +140,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Circuit Architect running on http://localhost:${PORT}`);
-  if (!ANTHROPIC_API_KEY) {
-    console.warn('WARNING: ANTHROPIC_API_KEY not set. Set it as an environment variable.');
+  if (!GEMINI_API_KEY) {
+    console.warn('WARNING: GEMINI_API_KEY not set. Set it as an environment variable.');
   }
 });
