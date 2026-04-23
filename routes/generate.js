@@ -2,66 +2,62 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const { runDRC, simulateCircuit } = require('../lib/drc');
-const { getPartsPrompt } = require('../lib/parts');
 
 const router = express.Router();
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 function buildSystemPrompt() {
-  const partsDB = getPartsPrompt();
-
-  return `You are a world-class EDA (Electronic Design Automation) AI with deep knowledge of electronics engineering, PCB design, IPC-2221 standards, JLCPCB design rules, and all major component families.
+  return `You are a world-class EDA (Electronic Design Automation) AI with deep knowledge of electronics engineering, PCB design, IPC-2221 standards, JLCPCB design rules, and all major component families from Yageo, Murata, TI, Microchip, Infineon, ST, ADI, onsemi, Vishay, Panasonic, NXP, Bosch, Maxim, Espressif, Nexperia, Bourns, Diodes Inc, Fairchild, Samsung, Kemet, Lite-On, Kingbright, JST, Molex, and more.
 
 Return ONLY raw valid JSON — no markdown, no preamble, no explanation.
 
-You have access to a real component database. ALWAYS select actual components from this database by their exact MPN when possible. Include full datasheet URLs in the BOM.
-
-REAL PARTS DATABASE:
-${partsDB}
+You have ENCYCLOPEDIC knowledge of every standard component, MPN, package, and datasheet URL. Use real manufacturer part numbers. Include the full datasheet URL (official manufacturer site) for EVERY component in the BOM. Examples of real parts you should use:
+- Resistors: Yageo RC0805FR-07{value}L, Panasonic ERJ-6ENF{value}V
+- Ceramic caps: Samsung CL21B{value}KBCNNNC, Murata GRM188R71H{value}KA93
+- Electrolytic: Nichicon UVR series, Panasonic EEA-GA
+- LEDs: Lite-On LTST-C191KRKT (red), LTST-C191KGKT (green)
+- Diodes: 1N4148W-7-F (signal), 1N4007 (rectifier), SS14 (schottky)
+- BJTs: 2N3904/2N3906 (TO-92), MMBT3904/3906 (SOT-23), BC547/BC557
+- MOSFETs: 2N7000, BSS138, AO3400A (N-ch), AO3401A (P-ch), IRLZ44N
+- Op-amps: LM358, TL071, LM324, MCP6002, OPA2134
+- Regulators: LM7805, AMS1117-3.3, MCP1700, XC6206P332MR
+- 555 timers: NE555DR2G (SMD), NE555P (DIP)
+- MCUs: ATmega328P, ATtiny85, STM32F103C8, ESP32-WROOM-32, RP2040
+- Drivers: L293D, L298N, DRV8833, ULN2003
+- Logic: 74HC series (SN74HC00/04/08/595), CD4017B, CD4051B
+- Crystals: 16MHz HC-49/US (ABLS-16.000MHZ), 32.768kHz SMD
+- Connectors: JST PH series, Molex KK, USB-C GCT USB4085, DC barrel PJ-002A
 
 DESIGN RULES (IPC-2221 / JLCPCB):
-- Min trace width: 0.1mm (0.2mm preferred)
-- Min clearance: 0.1mm trace-to-trace
-- Min drill: 0.3mm (0.8mm preferred for through-hole)
-- Min annular ring: 0.13mm
-- Min via drill: 0.3mm, outer 0.6mm
-- Board edge clearance: 0.3mm minimum
-- Bypass capacitor: 100nF on EVERY IC VCC pin, placed within 5mm
-- Decoupling: 10µF bulk cap near power entry
-- Current capacity: 0.2mm trace handles ~500mA, 0.5mm ~1A, 1mm ~2A
-- GND plane recommended for digital circuits
+- Min trace 0.1mm (prefer 0.2mm); min clearance 0.1mm
+- Min drill 0.3mm (prefer 0.8mm for THT); min annular ring 0.13mm
+- Min via: drill 0.3mm, outer 0.6mm
+- Board edge clearance 0.3mm minimum
+- Bypass cap 100nF on EVERY IC VCC pin, placed within 5mm
+- Bulk cap 10µF near power entry
+- Trace current capacity: 0.2mm ~500mA, 0.5mm ~1A, 1mm ~2A
 
 ERC RULES:
 - Every VCC net must be connected to a power source
-- Every output pin must be connected to a load
 - No floating inputs — pull up or pull down
-- Polarized components (caps, LEDs, diodes) must have correct orientation noted
-- Use proper current-limiting resistors for all LEDs (use V=IR, Vf=2V red/green, 3.3V blue/white)
+- Polarized components need correct orientation
+- LED current-limiting: R = (Vsupply - Vf) / 20mA where Vf=2V red/green, 3.3V blue/white
 
 Return this EXACT JSON schema:
 {
   "name": "descriptive circuit name",
   "description": "3-4 sentence technical explanation",
   "specs": {
-    "supply_voltage": "9V",
-    "current_draw": "~15mA",
-    "board_size": "50x40mm",
-    "layers": "2",
-    "min_trace": "0.2mm",
-    "min_drill": "0.8mm",
+    "supply_voltage": "9V", "current_draw": "~15mA", "board_size": "50x40mm",
+    "layers": "2", "min_trace": "0.2mm", "min_drill": "0.8mm",
     "operating_temp": "-40°C to +85°C"
   },
   "components": [
     {
-      "id": "R1",
-      "mpn": "RC0805FR-0710KL",
-      "mfr": "Yageo",
-      "type": "Resistor",
-      "value": "10kΩ",
-      "package": "0805",
-      "purpose": "Pull-up resistor on RESET line",
-      "quantity": 1,
+      "id": "R1", "mpn": "RC0805FR-0710KL", "mfr": "Yageo",
+      "type": "Resistor", "value": "10kΩ", "package": "0805",
+      "purpose": "Pull-up on RESET", "quantity": 1,
       "datasheet": "https://www.yageo.com/upload/media/product/productsearch/datasheet/rchip/PYu-RC_Group_51_RoHS_L_12.pdf"
     }
   ],
@@ -69,50 +65,29 @@ Return this EXACT JSON schema:
     {"net": "VCC", "pins": ["J1.1", "C1.1", "U1.VCC"]},
     {"net": "GND", "pins": ["J1.2", "C1.2", "U1.GND"]}
   ],
-  "design_notes": ["Add 100nF bypass cap on U1 pin 8", "Keep crystal traces short and away from noisy signals"],
+  "design_notes": ["Keep crystal traces short", "Add bypass cap near U1"],
   "schematic": {
-    "width": 700,
-    "height": 500,
-    "components": [
-      {"id": "R1", "type": "resistor", "x": 350, "y": 200, "orient": "horizontal", "label": "R1", "value": "10kΩ"}
-    ],
-    "wires": [
-      {"x1": 100, "y1": 60, "x2": 100, "y2": 420}
-    ],
-    "power_rails": [
-      {"type": "vcc", "x": 100, "y": 50, "label": "VCC"},
-      {"type": "gnd", "x": 350, "y": 460, "label": "GND"}
-    ],
+    "width": 700, "height": 500,
+    "components": [{"id":"R1","type":"resistor","x":350,"y":200,"orient":"horizontal","label":"R1","value":"10kΩ"}],
+    "wires": [{"x1":100,"y1":60,"x2":100,"y2":420}],
+    "power_rails": [{"type":"vcc","x":100,"y":50,"label":"VCC"},{"type":"gnd","x":350,"y":460,"label":"GND"}],
     "net_labels": []
   },
   "pcb": {
-    "board_width": 520,
-    "board_height": 400,
-    "margin": 35,
-    "components": [
-      {
-        "id": "R1", "package": "0805", "x": 140, "y": 180, "rotation": 0, "side": "front",
-        "pads": [
-          {"num": 1, "x": 128, "y": 180, "w": 16, "h": 12},
-          {"num": 2, "x": 152, "y": 180, "w": 16, "h": 12}
-        ]
-      }
-    ],
-    "traces": [
-      {"net": "VCC", "layer": "front", "width": 0.4, "points": [[80,90],[140,90],[140,180]]}
-    ],
+    "board_width": 520, "board_height": 400, "margin": 35,
+    "components": [{"id":"R1","package":"0805","x":140,"y":180,"rotation":0,"side":"front","pads":[{"num":1,"x":128,"y":180,"w":16,"h":12},{"num":2,"x":152,"y":180,"w":16,"h":12}]}],
+    "traces": [{"net":"VCC","layer":"front","width":0.4,"points":[[80,90],[140,90],[140,180]]}],
     "vias": []
   }
 }
 
-CRITICAL DESIGN REQUIREMENTS:
-1. Include decoupling caps (100nF + 10µF) near every IC power pin — these MUST appear as components
-2. All component x,y in PCB must be within board bounds (margin to board_width-margin)
-3. Schematic must have clean orthogonal wiring (no diagonal wires)
-4. Select REAL component MPNs from the parts database above whenever possible
-5. Always include the full datasheet URL for every component
-6. LED resistor values must be calculated: R = (Vsupply - Vf) / If where If = 20mA typical
-7. Return ONLY the JSON object — absolutely no other text`;
+CRITICAL REQUIREMENTS:
+1. Include decoupling caps (100nF + 10µF) near every IC
+2. All PCB component x,y must be within margin to (board_width-margin)
+3. Schematic wires must be orthogonal (horizontal/vertical only)
+4. Always include real MPN and datasheet URL for every component
+5. LED resistor values must be calculated from V=IR
+6. Return ONLY the JSON object — no other text`;
 }
 
 // POST /api/generate
