@@ -1,11 +1,11 @@
 const express = require('express');
+const fetch = require('node-fetch');
 const cors = require('cors');
 const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
@@ -13,13 +13,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', hasKey: !!GEMINI_API_KEY });
+  res.json({ status: 'ok', hasKey: !!GROQ_API_KEY });
 });
 
-// Secure Gemini API proxy — key never sent to browser
+// Secure Groq API proxy — key never sent to browser
 app.post('/api/generate', async (req, res) => {
-  if (!GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY not configured on server.' });
+  if (!GROQ_API_KEY) {
+    return res.status(500).json({ error: 'GROQ_API_KEY not configured on server.' });
   }
 
   const { prompt } = req.body;
@@ -115,11 +115,29 @@ Design rules:
 - CRITICAL: Return ONLY the JSON object, no other text`;
 
   try {
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 4000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
 
-    const result = await model.generateContent(systemPrompt + '\n\nUser request: ' + prompt);
-    const raw = result.response.text().trim();
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return res.status(response.status).json({ error: err.error?.message || 'Groq API error' });
+    }
+
+    const data = await response.json();
+    const raw = data.choices[0].message.content.trim();
 
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'No valid JSON in AI response' });
@@ -140,7 +158,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Circuit Architect running on http://localhost:${PORT}`);
-  if (!GEMINI_API_KEY) {
-    console.warn('WARNING: GEMINI_API_KEY not set. Set it as an environment variable.');
+  if (!GROQ_API_KEY) {
+    console.warn('WARNING: GROQ_API_KEY not set. Set it as an environment variable.');
   }
 });
