@@ -1,17 +1,19 @@
 {
-  "name": "circuit-architect",
-  "version": "1.0.0",
-  "description": "AI-powered circuit schematic and PCB layout generator",
+  "name": "circuit-architect-pro",
+  "version": "2.0.0",
+  "description": "AI PCB Designer with auth, DRC, simulation, and parts database",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "node-fetch": "^2.7.0"
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.7.0",
+    "uuid": "^9.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
