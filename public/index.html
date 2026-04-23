@@ -349,7 +349,9 @@ textarea#prompt::placeholder{color:var(--text3)}
       <!-- EXPORT -->
       <div class="export-sec">
         <div class="plabel" style="margin-bottom:6px">EXPORT</div>
-        <button class="exp-btn" onclick="exportGerber()" id="exp-g" disabled>📦 Gerbers (.zip)</button>
+        <button class="exp-btn" onclick="exportKiCad()" id="exp-k" disabled>⚡ KiCad Project (.kicad_sch + .kicad_pcb)</button>
+        <button class="exp-btn" onclick="exportAltium()" id="exp-a" disabled>🔷 Altium / EAGLE Schematic (.sch)</button>
+        <button class="exp-btn" onclick="exportGerber()" id="exp-g" disabled>📦 Gerbers (.gbr × 5)</button>
         <button class="exp-btn" onclick="exportBOM()" id="exp-b" disabled>📋 BOM with Datasheets (.csv)</button>
         <button class="exp-btn" onclick="exportDrill()" id="exp-d" disabled>📐 Drill File (.drl)</button>
         <button class="exp-btn" onclick="exportSchSVG()" id="exp-s" disabled>🖼 Schematic SVG</button>
@@ -661,10 +663,33 @@ function applyZoom() {
 }
 
 function enableExports() {
-  ['exp-g','exp-b','exp-d','exp-s','drc-run-btn','sim-run-btn'].forEach(id => {
+  ['exp-k','exp-a','exp-g','exp-b','exp-d','exp-s','drc-run-btn','sim-run-btn'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = false;
   });
+}
+
+async function exportKiCad() {
+  if (!circuitData) return;
+  try {
+    toast('⚡ Building KiCad project…');
+    const r = await api('POST', '/api/generate/export/kicad', { circuit: circuitData });
+    const entries = Object.entries(r.files).filter(([fn]) => !fn.endsWith('.sch') || fn.endsWith('.kicad_sch'));
+    // Sequential downloads — the README last
+    entries.forEach(([fn, content], i) => setTimeout(() => dl(content, fn), i * 180));
+    toast(`⚡ Downloading ${entries.length} KiCad files…`);
+  } catch (e) { toast('Export failed: ' + e.message); }
+}
+
+async function exportAltium() {
+  if (!circuitData) return;
+  try {
+    const r = await api('POST', '/api/generate/export/kicad', { circuit: circuitData });
+    const eagleEntry = Object.entries(r.files).find(([fn]) => fn.endsWith('.sch') && !fn.endsWith('.kicad_sch'));
+    if (!eagleEntry) { toast('EAGLE file not generated'); return; }
+    dl(eagleEntry[1], eagleEntry[0], 'application/xml');
+    toast('🔷 EAGLE .sch downloaded — import via Altium File > Import Wizard');
+  } catch (e) { toast('Export failed: ' + e.message); }
 }
 
 function toast(msg, dur=2800) {

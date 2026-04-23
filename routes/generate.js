@@ -2,6 +2,8 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const { runDRC, simulateCircuit } = require('../lib/drc');
+const { autoRoute } = require('../lib/router');
+const { exportAll } = require('../lib/kicad-export');
 
 const router = express.Router();
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -205,6 +207,7 @@ router.post('/', async (req, res) => {
     // ── Initial generation ──
     const rawText = await callAI(systemPrompt, prompt);
     let circuit = extractJSON(rawText);
+    circuit = autoRoute(circuit);
     let drc = runDRC(circuit);
 
     const iterationLog = [{
@@ -220,7 +223,7 @@ router.post('/', async (req, res) => {
       try {
         const repairPrompt = buildRepairPrompt(circuit, drc, iteration);
         const repairRaw = await callAI(systemPrompt, repairPrompt);
-        const repaired = extractJSON(repairRaw);
+        const repaired = autoRoute(extractJSON(repairRaw));
         const newDrc = runDRC(repaired);
 
         iterationLog.push({
@@ -283,7 +286,7 @@ router.post('/repair', async (req, res) => {
   if (!circuit) return res.status(400).json({ error: 'circuit required' });
   try {
     const systemPrompt = buildSystemPrompt();
-    let current = circuit;
+    let current = autoRoute(circuit);
     let drc = runDRC(current);
     const log = [{ iteration: 0, score: drc.score, violations: drc.violations.length, warnings: drc.warnings.length }];
 
@@ -291,7 +294,7 @@ router.post('/repair', async (req, res) => {
     while (drc.score < 100 && iteration <= MAX_DRC_ITERATIONS) {
       const repairPrompt = buildRepairPrompt(current, drc, iteration);
       const raw = await callAI(systemPrompt, repairPrompt);
-      const repaired = extractJSON(raw);
+      const repaired = autoRoute(extractJSON(raw));
       const newDrc = runDRC(repaired);
       log.push({ iteration, score: newDrc.score, violations: newDrc.violations.length, warnings: newDrc.warnings.length });
       if (newDrc.score >= drc.score) { current = repaired; drc = newDrc; }
@@ -308,6 +311,19 @@ router.post('/repair', async (req, res) => {
   } catch (err) {
     console.error('Repair error:', err.message);
     res.status(500).json({ error: 'Repair failed: ' + err.message });
+  }
+});
+
+// POST /api/generate/export/kicad — return KiCad + EAGLE file contents
+router.post('/export/kicad', (req, res) => {
+  const { circuit } = req.body;
+  if (!circuit) return res.status(400).json({ error: 'circuit required' });
+  try {
+    const files = exportAll(circuit);
+    res.json({ files });
+  } catch (err) {
+    console.error('KiCad export error:', err.message);
+    res.status(500).json({ error: 'Export failed: ' + err.message });
   }
 });
 
