@@ -50,32 +50,26 @@ ERC RULES (STRICT — all must pass):
 - LED current-limiting: R = (Vsupply - Vf) / 20mA where Vf=2V red/green, 3.3V blue/white
 - Every IC must have a decoupling capacitor (100nF ceramic, type must include "cap")
 
-SCHEMATIC RULES (KiCAD-style professional schematics):
-- Use grid-snap: all component x/y should be multiples of 10
-- Components on a canvas: schematic.width ≥ 900, schematic.height ≥ 620
-- Leave 80px around the border for title block and routing
-- Wires orthogonal only (horizontal/vertical), no diagonals
-- Use power flag symbols (power_rails) for VCC and GND — don't wire them to arbitrary points
-- Add net_labels for named internal nets (OUT, CLK, DATA, etc.)
-- Spread components out — at least 80px between centers
-- Supported component "type" values: resistor, capacitor, capacitor_pol, inductor, led, diode, transistor_npn, transistor_pnp, mosfet_n, op_amp, ic_dip8, ic_dip14, ic_dip16, voltage_reg, connector, crystal, battery, switch
-- Use "orient": "horizontal" or "vertical" for 2-pin components
-- For connectors, include "pins": <number>
-- Always provide "label" (reference designator like R1, C1) and "value"
+SCHEMATIC / PCB LAYOUT: Component positions, wires, traces, board dimensions,
+and power-rail locations are AUTO-PLACED by a deterministic server-side engine
+after you return — DO NOT spend tokens optimizing x/y positions. Set all x/y to
+0 and keep wires/traces/power_rails as empty arrays. Focus your effort on:
+  * Correct component selection + real MPNs + datasheets
+  * Complete, electrically-correct netlist
+  * Correct "type" field per component (see list below)
+  * Correct "package" + pad layout (pads are used for routing)
 
-PCB RULES (Altium/KiCAD-style realistic layout):
-- board_width ≥ 520, board_height ≥ 400, margin = 35 (SVG units; 1 unit ≈ 0.1mm)
-- All component x,y must be within (margin+15) to (board_width-margin-15) and (margin+15) to (board_height-margin-15)
-- Component centers must be ≥25 units apart (no overlap)
-- Traces orthogonal or 45° only; use intermediate points in "points" array for corners
-- Trace width: 0.3mm for signal, 0.5mm for power
-- Pads sized correctly for package:
-  * 0805: pads 18x14 at x±16 (center distance 32)
-  * 0603: pads 14x12 at x±12
-  * SOIC-8: 8 pads 14x6, spaced 12.7 apart, two rows 60 apart
-  * DIP-8: 8 through-hole pads with drill 0.8, at rows 90 apart, spacing 25
-  * TO-220: 3 TH pads spaced 50 apart
-- Use "package" field matching common footprints: 0805, 0603, SOIC-8, DIP-8, TO-220, TO-92, SOT-23, QFP-32, electrolytic_radial
+Supported schematic "type" values: resistor, capacitor, capacitor_pol, inductor,
+led, diode, transistor_npn, transistor_pnp, mosfet_n, op_amp, ic_dip8, ic_soic8,
+ic_dip14, ic_dip16, voltage_reg, connector, crystal, battery, switch.
+Always provide "label" (e.g. R1) and "value".
+
+Pad layout (RELATIVE to component center at x=0,y=0 — placer will shift):
+  * 0805: pads {num:1,x:-16,y:0,w:18,h:14}, {num:2,x:16,y:0,w:18,h:14}
+  * 0603: pads at x=±12, w=14, h=12
+  * SOIC-8: 8 pads w=14,h=6 — rows at y=±30, pins stepped 12.7 along x
+  * DIP-8:  8 TH pads drill 0.8 — rows at y=±45, pins stepped 25 along x
+  * TO-220: 3 TH pads at x=-50,0,50 y=0
 
 Return this EXACT JSON schema:
 {
@@ -100,29 +94,26 @@ Return this EXACT JSON schema:
   ],
   "design_notes": ["Keep crystal traces short", "Add bypass cap near U1"],
   "schematic": {
-    "width": 900, "height": 620,
-    "components": [{"id":"R1","type":"resistor","x":360,"y":240,"orient":"horizontal","label":"R1","value":"10kΩ"}],
-    "wires": [{"x1":100,"y1":100,"x2":100,"y2":400}],
-    "power_rails": [{"type":"vcc","x":100,"y":80,"label":"VCC"},{"type":"gnd","x":360,"y":420,"label":"GND"}],
-    "net_labels": [{"x":500,"y":240,"text":"OUT","side":"right"}]
+    "components": [{"id":"R1","type":"resistor","x":0,"y":0,"label":"R1","value":"10kΩ"}],
+    "wires": [],
+    "power_rails": [],
+    "net_labels": []
   },
   "pcb": {
-    "board_width": 520, "board_height": 400, "margin": 35,
-    "components": [{"id":"R1","package":"0805","x":140,"y":180,"rotation":0,"side":"front","pads":[{"num":1,"x":124,"y":180,"w":18,"h":14},{"num":2,"x":156,"y":180,"w":18,"h":14}]}],
-    "traces": [{"net":"VCC","layer":"front","width":0.4,"points":[[80,90],[140,90],[140,180]]}],
+    "components": [{"id":"R1","package":"0805","x":0,"y":0,"side":"front","pads":[{"num":1,"x":-16,"y":0,"w":18,"h":14},{"num":2,"x":16,"y":0,"w":18,"h":14}]}],
+    "traces": [],
     "vias": []
   }
 }
 
 CRITICAL REQUIREMENTS:
 1. Include decoupling caps (100nF + 10µF) near every IC with type containing "cap"
-2. All PCB component x,y must be within margin+15 to (board_width-margin-15)
-3. Schematic wires must be orthogonal (horizontal/vertical only)
-4. Always include real MPN and datasheet URL for every component
-5. LED resistor values must be calculated from V=IR
-6. At least one component must have type including "cap" per IC
-7. netlist must include both a GND net AND a power net (VCC/VDD/+5V/+3V3/etc.)
-8. Return ONLY the JSON object — no other text`;
+2. Always include real MPN and datasheet URL for every component
+3. LED resistor values must be calculated from V=IR
+4. At least one component with type containing "cap" per IC
+5. netlist must include both a GND net AND a power net (VCC/VDD/+5V/+3V3/etc.)
+6. Every pin on every component must appear in exactly one net
+7. Return ONLY the JSON object — no other text`;
 }
 
 function buildRepairPrompt(circuit, drc, iteration) {
