@@ -181,6 +181,21 @@ textarea#prompt::placeholder{color:var(--text3)}
 
 /* Info section headings */
 .info-head{font-size:9px;letter-spacing:.16em;color:var(--text3);margin:12px 0 6px;text-transform:uppercase}
+
+/* Educational LEARN tab */
+.learn-card{background:rgba(0,229,170,.04);border-left:2px solid var(--accent);border-radius:3px;padding:10px 12px;margin-bottom:10px}
+.learn-card h4{font-size:11px;font-weight:700;color:var(--accent);margin:0 0 6px;letter-spacing:.04em}
+.learn-card p{font-size:11px;color:var(--text2);line-height:1.7;margin:0 0 6px}
+.learn-card p:last-child{margin-bottom:0}
+.learn-eq{display:inline-block;font-family:'Courier New',monospace;background:#0a1818;color:#7af2c8;padding:2px 6px;border-radius:2px;font-size:11px;border:1px solid #1a3838;letter-spacing:.02em}
+.learn-eq-block{display:block;margin:6px 0;padding:8px 10px;background:#0a1818;color:#7af2c8;border:1px solid #1a3838;border-radius:3px;font-family:'Courier New',monospace;font-size:11px;line-height:1.6;white-space:pre-wrap}
+.learn-num{color:#ffcc00;font-weight:700}
+.learn-section{font-size:10px;letter-spacing:.16em;color:var(--accent);margin:18px 0 8px;text-transform:uppercase;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.learn-section:first-child{margin-top:0}
+.learn-tag{display:inline-block;font-size:9px;background:rgba(255,204,0,.1);color:#ffcc00;padding:1px 6px;border-radius:2px;letter-spacing:.06em;margin-right:6px;text-transform:uppercase}
+.learn-net{font-size:11px;color:var(--text2);line-height:1.6;padding:6px 0;border-bottom:1px dashed var(--border)}
+.learn-net:last-child{border-bottom:none}
+.learn-net b{color:var(--accent);font-family:'Courier New',monospace}
 </style>
 </head>
 <body>
@@ -302,6 +317,7 @@ textarea#prompt::placeholder{color:var(--text3)}
         <div class="rpt" onclick="setRTab('drc',this)">DRC</div>
         <div class="rpt" onclick="setRTab('sim',this)">SIMULATE</div>
         <div class="rpt" onclick="setRTab('layers',this)">LAYERS</div>
+        <div class="rpt" onclick="setRTab('learn',this)">LEARN</div>
       </div>
       <div class="rp-panel active" id="rpanel-info">
         <div class="info-head">CIRCUIT INFO</div>
@@ -344,6 +360,12 @@ textarea#prompt::placeholder{color:var(--text3)}
         <div class="spec-row"><span class="sk">Board thickness</span><span class="sv">1.6mm</span></div>
         <div class="spec-row"><span class="sk">Copper weight</span><span class="sv">1oz (35µm)</span></div>
         <div class="spec-row"><span class="sk">Surface finish</span><span class="sv">HASL / ENIG</span></div>
+      </div>
+      <div class="rp-panel" id="rpanel-learn">
+        <div id="learn-content">
+          <div class="info-head">PHYSICS &amp; MATH</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.7">Generate a circuit to see the physics, math, and datasheet guide tailored to your design.</div>
+        </div>
       </div>
 
       <!-- EXPORT -->
@@ -711,6 +733,321 @@ function renderInfo(c) {
     document.getElementById('info-notes-wrap').style.display = 'block';
     document.getElementById('info-notes').innerHTML = notes.map(n => `<div class="note-item">⚠ ${n}</div>`).join('');
   }
+  renderLearn(c);
+}
+
+// ─── RENDER LEARN (physics + math + datasheet guide) ──────────────────────
+const PHYSICS_DB = {
+  resistor: {
+    title: 'Resistor — Ohm\'s Law',
+    body: `A resistor obstructs current flow. Electrons collide with the lattice of the resistive material; their kinetic energy becomes heat. The relationship is linear:`,
+    eqs: [`V = I · R`, `P = V · I = I² · R = V² / R`],
+    desc: `Where V is volts across the resistor, I is amps through it, R is resistance in ohms, and P is power dissipated as heat.
+Practical: pick a package whose power rating exceeds the calculated P with at least 2× margin.`,
+    datasheet: 'Datasheet shows: tolerance (±1% / ±5%), temperature coefficient (ppm/°C), max power, max voltage, derating curve.'
+  },
+  capacitor: {
+    title: 'Capacitor — Charge Storage',
+    body: `A capacitor stores energy in an electric field between two plates. Charge accumulates proportional to applied voltage:`,
+    eqs: [`Q = C · V`, `i(t) = C · dV/dt`, `E = ½ C V²`],
+    desc: `Q is charge (coulombs), C is capacitance (farads). Crucially: a capacitor RESISTS sudden voltage changes — that's why we use them as decoupling caps near IC power pins. The IC pulls a sharp current spike, and the local cap provides it without the supply voltage sagging.
+Time constant for charging through a resistor: τ = R · C.`,
+    datasheet: 'Datasheet shows: capacitance, voltage rating (derate to 50% of DC bias for ceramics!), ESR, dielectric type (X7R/C0G/electrolytic), tolerance.'
+  },
+  capacitor_pol: {
+    title: 'Polarized Capacitor (Electrolytic)',
+    body: `Same Q = CV physics, but built from an oxide layer that's only insulating in one polarity. Reverse-biasing destroys it (with smoke).`,
+    eqs: [`Q = C · V`, `τ = R · C`],
+    desc: `Use for bulk smoothing where you need lots of capacitance cheaply (>1µF). Has high ESR and ESL — pair with a small ceramic cap in parallel for high-frequency decoupling.`,
+    datasheet: 'Datasheet shows: capacitance, voltage rating, ripple current, ESR, lifetime at 105°C (Arrhenius: every 10°C cooler doubles life).'
+  },
+  electrolytic: {
+    title: 'Electrolytic Capacitor',
+    body: `Polarized cap built from aluminum oxide. The oxide layer acts as the dielectric.`,
+    eqs: [`Q = C · V`, `τ = R · C`, `Z_ESR ≈ 0.05–2 Ω`],
+    desc: `High capacitance per dollar. Limit: ESR rises with frequency, dries out over years (10,000 hr typical at rated temp).`,
+    datasheet: 'Datasheet shows: ripple current rating, ESR vs frequency, lifetime curve, leakage current.'
+  },
+  inductor: {
+    title: 'Inductor — Magnetic Energy Storage',
+    body: `An inductor stores energy in a magnetic field. It RESISTS sudden current changes (Lenz\'s law: induced EMF opposes the change):`,
+    eqs: [`v(t) = L · di/dt`, `E = ½ L I²`, `Z_L = jωL`],
+    desc: `Use as filters (block AC, pass DC), as energy storage in switching regulators, or for impedance matching. In a buck converter, the inductor stores energy when the switch is on and releases it when off.`,
+    datasheet: 'Datasheet shows: inductance, saturation current, DCR (DC resistance), self-resonant frequency.'
+  },
+  led: {
+    title: 'LED — PN Junction Light Emission',
+    body: `A diode where electrons recombining with holes across the junction release a photon. The photon energy = bandgap = forward voltage.`,
+    eqs: [`E_photon = h·f = q·V_f`, `R_series = (V_supply - V_f) / I_LED`],
+    desc: `Different colors = different bandgap materials: red ~1.8V, green ~2.1V, blue/white ~3.0–3.4V. ALWAYS use a current-limiting resistor — the I-V curve is exponential, so without one a tiny voltage increase blows the LED.`,
+    datasheet: 'Datasheet shows: V_f at typical I_F (e.g. 2.0V @ 20mA), max continuous I_F, viewing angle, luminous intensity (mcd).'
+  },
+  diode: {
+    title: 'Diode — One-Way Current Valve',
+    body: `PN junction: current only flows when the P-side is more positive than the N-side by ≥ V_f (~0.6V for silicon, 0.3V for Schottky).`,
+    eqs: [`I = I_S · (e^(V/(n·V_T)) − 1)`, `V_T = kT/q ≈ 26 mV @ 25°C`],
+    desc: `Shockley equation. Practical use: rectification, polarity protection, freewheeling diode across inductive loads to clamp the back-EMF spike.`,
+    datasheet: 'Datasheet shows: V_f vs I_F curve, max reverse voltage (V_R), reverse recovery time (t_rr), max forward current.'
+  },
+  transistor_npn: {
+    title: 'NPN BJT — Current-Controlled Switch',
+    body: `Three-layer NPN sandwich. A small base current controls a larger collector current.`,
+    eqs: [`I_C = β · I_B`, `V_BE ≈ 0.7 V`, `I_E = I_B + I_C`],
+    desc: `β (hFE) is current gain, typically 50–300. To use as a switch (saturation), drive I_B = 10× higher than needed so V_CE drops to ~0.2V regardless of load. Active region (linear) is for amplifiers.`,
+    datasheet: 'Datasheet shows: hFE vs I_C curve, V_CE(sat), max I_C, max V_CE, transition frequency (f_T).'
+  },
+  transistor_pnp: {
+    title: 'PNP BJT — High-Side Switch',
+    body: `Mirror of NPN. Current flows out of the emitter (not into it). Drive base LOW (relative to emitter) to turn ON.`,
+    eqs: [`I_C = β · I_B`, `V_EB ≈ 0.7 V`],
+    desc: `Used for high-side switching when you want to disconnect a load from the positive rail.`,
+    datasheet: 'Same as NPN but inverted polarity.'
+  },
+  mosfet_n: {
+    title: 'N-MOSFET — Voltage-Controlled Switch',
+    body: `A field effect across the gate creates a conductive channel between drain and source. Voltage controls — almost zero gate current in DC.`,
+    eqs: [`I_D = ½ · μ_n · C_ox · W/L · (V_GS − V_th)²` , `R_DS(on) at V_GS_max`, `Q_g = C_iss · ΔV_GS`],
+    desc: `Logic-level FETs turn on at V_GS ~2.5V; standard FETs need 10V. R_DS(on) is conduction loss. Q_g is gate charge — drives switching loss in PWM. Heat rises as I²·R_DS(on).`,
+    datasheet: 'Datasheet shows: V_th, R_DS(on) at V_GS, max V_DS, max I_D continuous, Q_g, SOA (safe operating area).'
+  },
+  op_amp: {
+    title: 'Op-Amp — Ideal Amplifier',
+    body: `Two golden rules (when in negative feedback):`,
+    eqs: [`V+ = V−  (virtual short)`, `I+ = I− = 0  (high input Z)`, `V_out = A · (V+ − V−),  A → ∞`],
+    desc: `Real op-amps have GBW (gain-bandwidth product) — gain × bandwidth = constant. So a unity-gain stable op-amp with 1 MHz GBW gives you 1× at 1MHz, 10× at 100kHz, 100× at 10kHz. Slew rate (V/µs) limits the output\'s rate of change.`,
+    datasheet: 'Datasheet shows: GBW, slew rate, input offset voltage, input bias current, supply range, output swing (rail-to-rail or not).'
+  },
+  ic_dip8: {
+    title: 'IC — DIP-8 Package',
+    body: `8-pin dual-inline plastic package. Pin 1 is marked by a notch or dot. Numbering goes counter-clockwise from pin 1 viewed from above.`,
+    desc: `Read the datasheet pinout BEFORE wiring. For a 555: 1=GND, 2=TRIG, 3=OUT, 4=RESET, 5=CV, 6=THRES, 7=DIS, 8=VCC.`,
+    datasheet: 'Datasheet shows: pinout diagram, absolute maximum ratings, electrical characteristics table, application circuits, package outline (PCB footprint).'
+  },
+  ic_soic8: {
+    title: 'IC — SOIC-8 Surface Mount',
+    body: `8-pin surface-mount cousin of DIP-8. 1.27 mm pitch. Same pin numbering convention.`,
+    desc: `Smaller footprint, easier to assemble in production. Slightly worse thermal dissipation than DIP unless you use the EP (exposed pad) variant.`,
+    datasheet: 'Same content as DIP datasheet but with SOIC mechanical drawing.'
+  },
+  voltage_reg: {
+    title: 'Linear Voltage Regulator',
+    body: `Keeps V_out fixed despite changes in V_in or load current. Drops the excess as heat:`,
+    eqs: [`P_dissipated = (V_in − V_out) · I_load`, `η = V_out / V_in`],
+    desc: `Example: 12V → 5V at 1A loses 7W as heat. ALWAYS calculate dissipation before choosing the package. LDOs (low-dropout) need only ~0.2V headroom; classic 7805 needs 2V. Add input + output decoupling caps as the datasheet specifies.`,
+    datasheet: 'Datasheet shows: dropout voltage vs I_load, line/load regulation, PSRR, thermal resistance θ_JA, required input/output cap values.'
+  },
+  crystal: {
+    title: 'Quartz Crystal',
+    body: `Piezoelectric: applying voltage flexes the crystal, flexing the crystal generates voltage. Resonates at a precise mechanical frequency (very stable).`,
+    eqs: [`f_resonant = 1 / (2π · √(L · C))`],
+    desc: `Used as the clock for MCUs. Needs two small load caps to ground (typically 18–22 pF) — datasheet specifies the load capacitance C_L.`,
+    datasheet: 'Datasheet shows: nominal frequency, load capacitance, ESR, frequency tolerance (ppm), temperature stability.'
+  },
+  battery: {
+    title: 'Battery — Chemical Energy Source',
+    body: `Electrochemical cells convert chemical energy → electrical. Each chemistry has a characteristic cell voltage:`,
+    eqs: [`Energy = V · capacity (Ah) = Wh`, `Internal R causes V_terminal = V_oc − I · R_int`],
+    desc: `Lead-acid 2.0V/cell, NiMH 1.2V, Li-ion 3.7V, alkaline 1.5V. Voltage sags under load (internal resistance). Capacity drops at high discharge rates (Peukert\'s law).`,
+    datasheet: 'Datasheet shows: nominal voltage, capacity, max discharge rate, internal resistance, cycle life.'
+  },
+  switch: {
+    title: 'Switch — Mechanical Contact',
+    body: `Mechanical contact closure. Low resistance closed (mΩ), open infinite. Has bounce — contacts physically chatter for ~10ms when closing — needs debouncing in software or RC filter.`,
+    desc: `Pull-up resistor (typically 10kΩ) on input lines so the line has a defined state when switch is open.`,
+    datasheet: 'Datasheet shows: contact rating (V/A), insulation resistance, mechanical/electrical life cycles.'
+  },
+  connector: {
+    title: 'Connector / Header',
+    body: `Mechanical interface to the outside world. Pin 1 is usually marked. Mate cycles are limited (gold plated: 1000s; tin: 100s).`,
+    desc: `Key by polarity (notch) or by missing-pin to prevent reverse insertion.`,
+    datasheet: 'Datasheet shows: current rating per pin, mate cycles, contact resistance, pin pitch.'
+  },
+};
+
+// Convert net to a plain-English physics description
+function describeNet(net, comps) {
+  const upper = String(net.net || '').toUpperCase();
+  const pinCount = (net.pins || []).length;
+  const compsOnNet = [...new Set((net.pins || []).map(p => String(p).split('.')[0]))];
+  const compTypes = compsOnNet.map(id => {
+    const c = comps.find(cc => cc.id === id);
+    return c ? c.type : null;
+  }).filter(Boolean);
+  if (upper === 'VCC' || upper === 'VDD' || upper.startsWith('+')) {
+    return `Power rail: every component\'s positive supply pin ties here. Current flows IN to chips from this node. Local decoupling caps short any high-frequency noise to ground before it reaches sensitive pins.`;
+  }
+  if (upper === 'GND' || upper === 'VSS') {
+    return `Ground reference: 0V by definition. All voltages in the circuit are measured relative to this node. By Kirchhoff\'s Current Law, every electron that leaves a power source must return through ground — make this trace wide and continuous.`;
+  }
+  if (upper.includes('TRIG') && upper.includes('THRES')) {
+    return `Threshold/Trigger node of the 555 timer — a capacitor charges/discharges through resistors here. When V_cap < ⅓·V_CC the trigger fires; when V_cap > ⅔·V_CC the threshold trips. The frequency is set by how long it takes the cap to swing between these levels.`;
+  }
+  if (upper.includes('OUT')) {
+    return `Output node: drives downstream loads. Current FLOWS OUT of the driving pin. By Kirchhoff\'s Voltage Law, the sum of voltage drops along any path from source to ground = supply voltage.`;
+  }
+  return `Signal net with ${pinCount} pins on ${compTypes.length} component types. By Kirchhoff\'s Current Law, the sum of currents into this node equals zero — a node cannot store charge.`;
+}
+
+function eqHTML(eq) { return `<span class="learn-eq">${eq}</span>`; }
+function eqBlockHTML(eq) { return `<div class="learn-eq-block">${eq}</div>`; }
+
+function compute555(comps) {
+  // Look for an ic_dip8 (likely 555) plus R1, R2, C1
+  const ic = comps.find(c => c.type === 'ic_dip8');
+  if (!ic) return null;
+  const rs = comps.filter(c => c.type === 'resistor');
+  const cs = comps.filter(c => c.type === 'capacitor' || c.type === 'capacitor_pol' || c.type === 'electrolytic');
+  if (rs.length < 2 || cs.length < 1) return null;
+  const parseVal = (s) => {
+    if (!s) return null;
+    const m = String(s).match(/([\d.]+)\s*([kKmMuµnpf]?)/);
+    if (!m) return null;
+    let v = parseFloat(m[1]);
+    const u = m[2];
+    if (u === 'k' || u === 'K') v *= 1e3;
+    else if (u === 'M') v *= 1e6;
+    else if (u === 'm') v *= 1e-3;
+    else if (u === 'u' || u === 'µ') v *= 1e-6;
+    else if (u === 'n') v *= 1e-9;
+    else if (u === 'p') v *= 1e-12;
+    return v;
+  };
+  const R1 = parseVal(rs[0].value);
+  const R2 = parseVal(rs[1].value);
+  const C  = parseVal(cs[0].value);
+  if (R1 == null || R2 == null || C == null) return null;
+  const f = 1.44 / ((R1 + 2 * R2) * C);
+  const duty = (R1 + R2) / (R1 + 2 * R2) * 100;
+  return { R1, R2, C, f, duty, R1lbl: rs[0].value, R2lbl: rs[1].value, Clbl: cs[0].value };
+}
+
+function fmtFreq(f) {
+  if (f >= 1e6) return (f / 1e6).toFixed(2) + ' MHz';
+  if (f >= 1e3) return (f / 1e3).toFixed(2) + ' kHz';
+  if (f >= 1) return f.toFixed(2) + ' Hz';
+  return (f * 1000).toFixed(2) + ' mHz';
+}
+
+function renderLearn(c) {
+  const root = document.getElementById('learn-content');
+  if (!root || !c || !c.components) return;
+  const comps = c.components || [];
+  const nets = c.netlist || [];
+  const types = [...new Set(comps.map(x => x.type))];
+
+  let html = '';
+
+  // ── 1. Component physics (only types actually used) ──────────
+  html += `<div class="learn-section">Component Physics</div>`;
+  types.forEach(t => {
+    const p = PHYSICS_DB[t];
+    if (!p) return;
+    html += `<div class="learn-card">
+      <h4>${p.title}</h4>
+      <p>${p.body}</p>
+      ${(p.eqs || []).map(eqBlockHTML).join('')}
+      ${p.desc ? `<p>${p.desc}</p>` : ''}
+      ${p.datasheet ? `<p><span class="learn-tag">Datasheet</span>${p.datasheet}</p>` : ''}
+    </div>`;
+  });
+
+  // ── 2. Per-net physics (Kirchhoff) ───────────────────────────
+  if (nets.length) {
+    html += `<div class="learn-section">Net-by-Net Analysis</div>`;
+    html += `<div class="learn-card">
+      <h4>Kirchhoff\'s Laws — the foundation</h4>
+      <p><b>KCL</b> (Current Law): ${eqHTML('Σ I_in = Σ I_out')} at every node. Charge cannot pile up at a wire junction.</p>
+      <p><b>KVL</b> (Voltage Law): ${eqHTML('Σ V = 0')} around any closed loop. The energy gained going up a battery equals the energy lost across all the components in the loop back to the start.</p>
+    </div>`;
+    nets.forEach(n => {
+      html += `<div class="learn-net"><b>${n.net}</b> — ${describeNet(n, comps)}</div>`;
+    });
+  }
+
+  // ── 3. Circuit-specific math ─────────────────────────────────
+  const t555 = compute555(comps);
+  if (t555) {
+    html += `<div class="learn-section">555 Timer Math (this circuit)</div>
+    <div class="learn-card">
+      <h4>Astable oscillator frequency</h4>
+      <p>The 555 in astable mode toggles its output as a capacitor C charges through ${eqHTML('R1+R2')} and discharges through ${eqHTML('R2')}. Switching thresholds are at ${eqHTML('⅓ V_CC')} and ${eqHTML('⅔ V_CC')}, so:</p>
+      ${eqBlockHTML(`f = 1.44 / ((R1 + 2·R2) · C)\nduty = (R1 + R2) / (R1 + 2·R2)`)}
+      <p>For your design: <span class="learn-eq">R1=${t555.R1lbl}</span> <span class="learn-eq">R2=${t555.R2lbl}</span> <span class="learn-eq">C=${t555.Clbl}</span></p>
+      ${eqBlockHTML(`f    = <span class="learn-num">${fmtFreq(t555.f)}</span>\nduty = <span class="learn-num">${t555.duty.toFixed(1)}%</span>\nperiod = <span class="learn-num">${(1000 / t555.f).toFixed(2)} ms</span>`)}
+      <p><span class="learn-tag">Tip</span>To get exactly 50% duty, R1 → 0 and a steering diode is added across R2 — but the standard 555 can\'t do less than 50% duty with this topology because charge always goes through R1+R2 but discharge only through R2.</p>
+    </div>`;
+  }
+
+  // LED current-limiting math
+  const ledComps = comps.filter(x => x.type === 'led');
+  const resComps = comps.filter(x => x.type === 'resistor');
+  if (ledComps.length && resComps.length) {
+    html += `<div class="learn-section">LED Current-Limiting Math</div>
+    <div class="learn-card">
+      <h4>Why a series resistor?</h4>
+      <p>An LED's I-V curve is exponential (Shockley diode equation). A 0.1V increase across V_f doubles the current. Without a series resistor, the smallest supply variation blows it.</p>
+      ${eqBlockHTML(`R_series = (V_supply − V_f_LED) / I_LED_target`)}
+      <p>Example: 5V supply, red LED V_f=2.0V, target 10mA →</p>
+      ${eqBlockHTML(`R = (5 − 2.0) / 0.010 = <span class="learn-num">300 Ω</span>\nP_resistor = (5−2.0) · 0.010 = <span class="learn-num">30 mW</span>  →  any 0805 (1/8W) is fine`)}
+      <p><span class="learn-tag">Why</span>The resistor "absorbs" the difference between supply and V_f. The LED self-regulates its V_f based on current; the resistor turns voltage-source variation into a fixed current.</p>
+    </div>`;
+  }
+
+  // RC filter math
+  const capComps = comps.filter(x => x.type.startsWith('capacitor') || x.type === 'electrolytic');
+  if (capComps.length && resComps.length && !t555) {
+    html += `<div class="learn-section">RC Time Constant</div>
+    <div class="learn-card">
+      <h4>Time constant τ and filter cutoff</h4>
+      <p>An R-C combination has a characteristic time ${eqHTML('τ = R · C')}. After 1τ a capacitor reaches 63% of its final voltage; after 5τ it\'s within 1% — engineers call that "fully charged".</p>
+      ${eqBlockHTML(`v(t) = V_∞ · (1 − e^(−t/τ))     [charging]\nv(t) = V_0 · e^(−t/τ)           [discharging]`)}
+      <p>As a low-pass filter, the cutoff frequency where the signal is attenuated to 70.7% (-3dB) is:</p>
+      ${eqBlockHTML(`f_c = 1 / (2π · R · C)`)}
+      <p>Above f_c the filter rolls off at 20 dB/decade (10× attenuation per 10× frequency increase).</p>
+    </div>`;
+  }
+
+  // ── 4. Datasheet reading guide ───────────────────────────────
+  html += `<div class="learn-section">How to read a datasheet</div>
+  <div class="learn-card">
+    <h4>The 5 sections that matter</h4>
+    <p><b>1. Absolute Maximum Ratings</b> — voltages and currents that DESTROY the part. Stay 30% below these.</p>
+    <p><b>2. Recommended Operating Conditions</b> — where the part actually works as specified.</p>
+    <p><b>3. Electrical Characteristics</b> — the actual numbers (V_f, R_DS(on), GBW...) typically tabulated min/typ/max at 25°C.</p>
+    <p><b>4. Application Circuits</b> — the manufacturer's blessed reference designs. Start here.</p>
+    <p><b>5. Package / Mechanical</b> — the PCB footprint dimensions. This is what you import into your CAD as a footprint.</p>
+  </div>
+  <div class="learn-card">
+    <h4>From datasheet to physics</h4>
+    <p>Every spec links back to physics:</p>
+    <p>· <b>I_F vs V_F curve</b> → Shockley equation. Pick a target I_F, read off V_F, size R from V=IR.</p>
+    <p>· <b>R_DS(on) vs V_GS</b> → channel formed by gate field. Higher V_GS = wider channel = lower R = less heat.</p>
+    <p>· <b>Transition frequency f_T</b> → BJT current gain falls to 1 here. Stay 10× below for amplifiers.</p>
+    <p>· <b>θ_JA (°C/W)</b> → thermal resistance junction-to-ambient. ${eqHTML('T_j = T_amb + θ_JA · P_diss')}. Stay below T_j_max.</p>
+    <p>· <b>ESR vs frequency</b> for caps → ideal cap is 1/ωC, but real cap has parasitic resistance/inductance forming a self-resonance at one frequency.</p>
+  </div>
+
+  <div class="learn-section">PCB Physics</div>
+  <div class="learn-card">
+    <h4>Trace width &amp; current</h4>
+    <p>Copper has resistance ${eqHTML('R = ρ·L / (W·t)')} where ρ_copper = 1.68×10⁻⁸ Ω·m. Power dissipated as heat: ${eqHTML('P = I²·R')}.</p>
+    <p>IPC-2221 rule of thumb (1oz copper, 10°C rise): <span class="learn-eq">1A → 0.4mm</span> · <span class="learn-eq">3A → 1.5mm</span> · <span class="learn-eq">5A → 3mm</span>.</p>
+  </div>
+  <div class="learn-card">
+    <h4>Why decoupling caps go close to the IC pin</h4>
+    <p>Every trace has parasitic inductance ~1nH per mm. When an IC pulls a sharp current spike (di/dt), the trace develops a voltage drop V = L · di/dt. A 1A change in 1ns over 10mm of trace = 10nH × 1A/1ns = 10 V! That voltage glitches the supply rail.</p>
+    <p>Putting a 100nF cap right at the pin gives the IC a local energy reservoir, so the spike is sourced from the cap (zero loop inductance) instead of through the supply trace.</p>
+  </div>
+  <div class="learn-card">
+    <h4>Skin effect (high frequency)</h4>
+    <p>At MHz+, current crowds near the conductor surface. Skin depth ${eqHTML('δ = √(2ρ/(ωμ))')}. For copper at 100MHz, δ ≈ 6.6µm — most of the copper is unused. Practical: at high frequency, surface area matters more than cross-section. That\'s why RF designs use wide traces and ground planes.</p>
+  </div>
+  <div class="learn-card">
+    <h4>Characteristic impedance Z₀</h4>
+    <p>A trace over a ground plane is a transmission line with ${eqHTML('Z₀ = √(L/C)')} per unit length. For digital signals with sharp edges (rise time &lt; 2× propagation time), you must impedance-match (typically 50Ω single-ended, 100Ω differential) or you get reflections that cause ringing and ground bounce.</p>
+  </div>`;
+
+  root.innerHTML = html;
 }
 
 // ─── RENDER BOM ───────────────────────────────────────────────────────────
